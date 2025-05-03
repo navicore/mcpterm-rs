@@ -1,0 +1,19 @@
+[package]
+name = "mcpterm-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Command-line interface for Model Context Protocol"
+
+[dependencies]
+mcp-core = { path = "../mcp-core" }
+mcp-llm = { path = "../mcp-llm" }
+mcp-runtime = { path = "../mcp-runtime" }
+mcp-tools = { path = "../mcp-tools" }
+mcp-resources = { path = "../mcp-resources" }
+anyhow = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

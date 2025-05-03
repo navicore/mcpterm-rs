@@ -1,0 +1,19 @@
+[package]
+name = "mcp-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Runtime execution environment for Model Context Protocol"
+
+[dependencies]
+mcp-core = { path = "../mcp-core" }
+mcp-resources = { path = "../mcp-resources" }
+mcp-tools = { path = "../mcp-tools" }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+crossbeam-channel = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

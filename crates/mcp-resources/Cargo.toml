@@ -1,0 +1,16 @@
+[package]
+name = "mcp-resources"
+version = "0.1.0"
+edition = "2021"
+description = "Resource management for Model Context Protocol"
+
+[dependencies]
+mcp-core = { path = "../mcp-core" }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
