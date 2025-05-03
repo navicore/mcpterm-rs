@@ -8,5 +8,5 @@ pub use event_bus::{
     EventType, EventHandler, EventHandlerTrait, ScrollDirection,
     create_handler, FnEventHandler
 };
-pub use session::Session;
+pub use session::{Session, SessionManager};
 pub use executor::ToolExecutor;

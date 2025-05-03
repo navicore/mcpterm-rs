@@ -8,6 +8,7 @@ description = "Runtime execution environment for Model Context Protocol"
 mcp-core = { path = "../mcp-core" }
 mcp-resources = { path = "../mcp-resources" }
 mcp-tools = { path = "../mcp-tools" }
+mcp-llm = { path = "../mcp-llm" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 crossbeam-channel = { workspace = true }
@@ -17,6 +18,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full", "rt", "macros"] }
 tracing = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }

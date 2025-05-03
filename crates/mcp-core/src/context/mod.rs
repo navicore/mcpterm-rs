@@ -45,10 +45,46 @@ impl ConversationContext {
         }
     }
 
-    // Example method - will be fully implemented in future
+    // Helper methods to add messages of different types
     pub fn add_user_message(&mut self, content: &str) {
         self.messages.push(Message {
             role: MessageRole::User,
+            content: content.to_string(),
+            tool_calls: None,
+            tool_results: None,
+        });
+    }
+    
+    pub fn add_assistant_message(&mut self, content: &str) {
+        self.messages.push(Message {
+            role: MessageRole::Assistant,
+            content: content.to_string(),
+            tool_calls: None,
+            tool_results: None,
+        });
+    }
+    
+    pub fn add_tool_message(&mut self, content: &str) {
+        self.messages.push(Message {
+            role: MessageRole::Tool,
+            content: content.to_string(),
+            tool_calls: None,
+            tool_results: None,
+        });
+    }
+    
+    pub fn add_system_message(&mut self, content: &str) {
+        self.messages.push(Message {
+            role: MessageRole::System,
+            content: content.to_string(),
+            tool_calls: None,
+            tool_results: None,
+        });
+    }
+    
+    pub fn add_message(&mut self, role: MessageRole, content: &str) {
+        self.messages.push(Message {
+            role,
             content: content.to_string(),
             tool_calls: None,
             tool_results: None,

@@ -160,8 +160,10 @@ struct ClaudeStreamingResponse {
 struct ClaudeDelta {
     #[serde(default)]
     text: String,
-    #[serde(default)]
+    #[serde(rename = "type", default)]
     type_: Option<String>,
+    #[serde(default)]
+    index: Option<usize>,
 }
 
 // Claude Usage Statistics
@@ -356,6 +358,7 @@ impl LlmClient for BedrockClient {
         let payload_bytes = serde_json::to_vec(&claude_payload)?;
         
         debug!("Sending request to Bedrock: {}", self.config.model_id);
+        debug!("Request payload: {}", String::from_utf8_lossy(&payload_bytes));
         
         // Send the request to Bedrock
         let output = match self.client.invoke_model()
@@ -376,6 +379,7 @@ impl LlmClient for BedrockClient {
         // Parse the response
         let response_bytes = output.body;
         let response_str = String::from_utf8(response_bytes.as_ref().to_vec())?;
+        debug!("Received response from Bedrock: {}", response_str);
         
         // Check if request was cancelled
         {
@@ -396,10 +400,39 @@ impl LlmClient for BedrockClient {
         // Parse the Claude response
         match serde_json::from_str::<ClaudeResponse>(&response_str) {
             Ok(claude_response) => {
+                debug!("Successfully parsed Claude response: {:?}", claude_response.id);
                 self.parse_claude_response(&claude_response)
             },
             Err(err) => {
                 error!("Failed to parse Claude response: {}", err);
+                error!("Response string: {}", response_str);
+                
+                // Try alternative parsing strategies
+                debug!("Attempting to extract content from non-standard response");
+                
+                // Try to parse as JSON even if it's not the expected structure
+                if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_str) {
+                    // See if there's a content field that contains text
+                    if let Some(content) = json_value.get("content") {
+                        if let Some(text) = content.as_str() {
+                            debug!("Extracted content from non-standard response");
+                            return Ok(LlmResponse {
+                                id: request_id,
+                                content: text.to_string(),
+                                tool_calls: Vec::new(),
+                            });
+                        }
+                    }
+                    
+                    // Return the raw JSON as content as a last resort
+                    debug!("Returning raw JSON as content");
+                    return Ok(LlmResponse {
+                        id: request_id,
+                        content: response_str,
+                        tool_calls: Vec::new(),
+                    });
+                }
+                
                 Err(anyhow!(BedrockError::ResponseParseError(err.to_string())))
             }
         }
@@ -421,75 +454,179 @@ impl LlmClient for BedrockClient {
         let payload_bytes = serde_json::to_vec(&claude_payload)?;
         
         debug!("Sending streaming request to Bedrock: {}", self.config.model_id);
-        
-        // Send the streaming request to Bedrock
-        let response = match self.client.invoke_model_with_response_stream()
-            .body(Blob::new(payload_bytes))
-            .model_id(&self.config.model_id)
-            .send()
-            .await {
-            Ok(response) => response,
-            Err(err) => {
-                error!("Bedrock API streaming error: {:?}", err);
-                // Remove from active requests
-                let mut active_requests = self.active_requests.lock().unwrap();
-                active_requests.remove(&request_id);
-                return Err(anyhow!(BedrockError::ApiError(err.to_string())));
-            }
-        };
-        
-        // Keep track of active request for cancellation
-        let active_requests = self.active_requests.clone();
-        let request_id_clone = request_id.clone();
+        debug!("Request payload: {}", String::from_utf8_lossy(&payload_bytes));
         
         // Create a channel for the stream
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<StreamChunk>>(100);
         
-        // Process the stream asynchronously
-        // The exact API for streaming responses may vary between AWS SDK versions
-        // This is a simplified version to make compilation work
+        // Clone needed data for the async task
+        let client = self.client.clone();
+        let model_id = self.config.model_id.clone();
+        let active_requests = self.active_requests.clone();
+        let request_id_clone = request_id.clone();
+        
+        // We need to ensure we don't use self in the async block
+        // Extract what we need from the response to avoid borrowing issues
+        let extract_tool_calls = |json_value: &serde_json::Value| -> Option<ClientToolCall> {
+            if let Ok(mcp_request) = serde_json::from_value::<McpRequest>(json_value.clone()) {
+                if mcp_request.method == "mcp.tool_call" {
+                    if let Some(name) = mcp_request.params.get("name") {
+                        if let Some(name_str) = name.as_str() {
+                            if let Some(parameters) = mcp_request.params.get("parameters") {
+                                let tool_call = ClientToolCall {
+                                    id: Uuid::new_v4().to_string(),
+                                    tool: name_str.to_string(),
+                                    params: parameters.clone(),
+                                };
+                                return Some(tool_call);
+                            }
+                        }
+                    }
+                }
+            }
+            None
+        };
+        
+        // Spawn a task to run the request and process the response
         tokio::spawn(async move {
-            // Simplified placeholders for streaming response
-            let mut content_buffer = String::new();
-            let mut is_complete = false;
+            debug!("We're not using streaming for now, using regular invoke_model");
+            debug!("In AWS SDK 1.x, the streaming APIs are difficult to work with");
             
-            // In a real implementation, we'd loop through the streaming response
-            // For compilation purposes, we'll just simulate a single response
-            let sample_response = r#"{"delta": {"text": "Sample response"}}"#;
+            // Send a regular request instead of streaming
+            let output = match client.invoke_model()
+                .body(Blob::new(payload_bytes))
+                .model_id(&model_id)
+                .send()
+                .await {
+                Ok(response) => response,
+                Err(err) => {
+                    error!("Bedrock API error: {:?}", err);
+                    
+                    // Send error through the channel first
+                    let _ = tx.send(Err(anyhow!(BedrockError::ApiError(err.to_string())))).await;
+                    
+                    // Remove from active requests
+                    {
+                        let mut active_requests = active_requests.lock().unwrap();
+                        active_requests.remove(&request_id_clone);
+                    }
+                    return;
+                }
+            };
             
-            if let Ok(streaming_response) = serde_json::from_str::<ClaudeStreamingResponse>(sample_response) {
-                if let Some(delta) = streaming_response.delta {
-                    // Send sample streaming chunk
+            debug!("Received response from Bedrock");
+            
+            // Get response body
+            let response_bytes = output.body;
+            let response_str = String::from_utf8_lossy(response_bytes.as_ref()).to_string();
+            debug!("Response: {}", response_str);
+            
+            // Check if request was cancelled
+            {
+                let active_requests = active_requests.lock().unwrap();
+                if let Some(cancelled) = active_requests.get(&request_id_clone) {
+                    if *cancelled {
+                        debug!("Request {} was cancelled", request_id_clone);
+                        return;
+                    }
+                }
+            }
+            
+            // Parse the Claude response
+            match serde_json::from_str::<ClaudeResponse>(&response_str) {
+                Ok(claude_response) => {
+                    debug!("Successfully parsed Claude response: {:?}", claude_response.id);
+                    
+                    // Get the text content from Claude
+                    let content = claude_response.content.iter()
+                        .filter(|c| c.content_type == "text")
+                        .map(|c| c.text.clone())
+                        .collect::<Vec<String>>()
+                        .join("\n");
+                    
+                    // Emit the content as a stream
                     let stream_chunk = StreamChunk {
                         id: request_id_clone.clone(),
-                        content: delta.text,
+                        content: content.clone(),
                         is_tool_call: false,
                         tool_call: None,
                         is_complete: false,
                     };
                     
                     if let Err(e) = tx.send(Ok(stream_chunk)).await {
-                        error!("Failed to send chunk to stream: {}", e);
+                        error!("Failed to send content chunk to stream: {}", e);
+                    }
+                    
+                    // Try to parse as MCP
+                    let is_mcp_response = is_valid_json(&content);
+                    
+                    if is_mcp_response {
+                        debug!("Content appears to be valid JSON, checking for tool calls");
+                        
+                        // Try to extract tool calls
+                        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&content) {
+                            if let Some(tool_call) = extract_tool_calls(&json_value) {
+                                debug!("Found tool call in response");
+                                
+                                // Send a tool call chunk
+                                let final_chunk = StreamChunk {
+                                    id: request_id_clone.clone(),
+                                    content: String::new(), // Already sent in previous chunk
+                                    is_tool_call: true,
+                                    tool_call: Some(tool_call),
+                                    is_complete: true,
+                                };
+                                
+                                if let Err(e) = tx.send(Ok(final_chunk)).await {
+                                    error!("Failed to send tool call chunk to stream: {}", e);
+                                }
+                                
+                                // Clean up and exit
+                                {
+                                    let mut active_requests = active_requests.lock().unwrap();
+                                    active_requests.remove(&request_id_clone);
+                                }
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // Send completion
+                    let final_chunk = StreamChunk {
+                        id: request_id_clone.clone(),
+                        content: String::new(), // Already sent in previous chunk
+                        is_tool_call: false,
+                        tool_call: None,
+                        is_complete: true,
+                    };
+                    
+                    if let Err(e) = tx.send(Ok(final_chunk)).await {
+                        error!("Failed to send completion chunk to stream: {}", e);
+                    }
+                },
+                Err(e) => {
+                    error!("Failed to parse Claude response: {}", e);
+                    
+                    // Send the raw content anyway
+                    let stream_chunk = StreamChunk {
+                        id: request_id_clone.clone(),
+                        content: response_str,
+                        is_tool_call: false,
+                        tool_call: None,
+                        is_complete: true,
+                    };
+                    
+                    if let Err(send_err) = tx.send(Ok(stream_chunk)).await {
+                        error!("Failed to send raw content: {}", send_err);
                     }
                 }
             }
             
-            // Simulate stream completion
-            let final_chunk = StreamChunk {
-                id: request_id_clone.clone(),
-                content: String::new(),
-                is_tool_call: false,
-                tool_call: None,
-                is_complete: true,
-            };
-            
-            if let Err(e) = tx.send(Ok(final_chunk)).await {
-                error!("Failed to send completion chunk to stream: {}", e);
-            }
-            
             // Remove from active requests
-            let mut active_requests = active_requests.lock().unwrap();
-            active_requests.remove(&request_id_clone);
+            {
+                let mut active_requests = active_requests.lock().unwrap();
+                active_requests.remove(&request_id_clone);
+            }
         });
         
         // Return the receiver as a stream
