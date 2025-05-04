@@ -67,17 +67,9 @@ struct GrepMatch {
 }
 
 /// The GrepTool for searching file contents with regex patterns
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GrepTool {
     config: GrepConfig,
-}
-
-impl Default for GrepTool {
-    fn default() -> Self {
-        Self {
-            config: GrepConfig::default(),
-        }
-    }
 }
 
 impl GrepTool {
