@@ -96,7 +96,7 @@ struct DiffStats {
 }
 
 /// The DiffTool for comparing files or strings
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct DiffTool {
     config: DiffConfig,
 }
@@ -179,6 +179,7 @@ impl DiffTool {
             unchanged: 0,
         };
 
+        #[allow(unused_assignments)]
         let mut current_hunk_header = String::new();
         let mut current_hunk_lines = Vec::new();
         let mut old_line_num: usize = 0;
@@ -208,7 +209,7 @@ impl DiffTool {
                         // Add context lines from buffer
                         for (i, line) in context_buffer.iter().enumerate() {
                             let ctx_old_num = old_line_num - context_buffer.len() + i;
-                            let ctx_new_num = new_line_num - context_buffer.len() + i;
+                            let _ctx_new_num = new_line_num - context_buffer.len() + i;
                             if ctx_old_num >= hunk_old_start {
                                 current_hunk_lines.push(format!(" {}", line));
                                 hunk_old_count += 1;
@@ -234,7 +235,7 @@ impl DiffTool {
 
                         // Add context lines from buffer
                         for (i, line) in context_buffer.iter().enumerate() {
-                            let ctx_old_num = old_line_num - context_buffer.len() + i;
+                            let _ctx_old_num = old_line_num - context_buffer.len() + i;
                             let ctx_new_num = new_line_num - context_buffer.len() + i;
                             if ctx_new_num >= hunk_new_start {
                                 current_hunk_lines.push(format!(" {}", line));
@@ -761,7 +762,8 @@ fn normalize_whitespace(text: &str) -> String {
     }
 
     // Then, remove whitespace around braces and parentheses
-    let result = result
+
+    result
         .replace(" {", "{")
         .replace("{ ", "{")
         .replace(" }", "}")
@@ -769,7 +771,5 @@ fn normalize_whitespace(text: &str) -> String {
         .replace(" (", "(")
         .replace("( ", "(")
         .replace(" )", ")")
-        .replace(") ", ")");
-
-    result
+        .replace(") ", ")")
 }

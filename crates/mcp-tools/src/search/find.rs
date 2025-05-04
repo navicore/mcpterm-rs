@@ -96,16 +96,14 @@ impl From<&str> for SortOrder {
 }
 
 /// The FindTool for searching files by name patterns
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FindTool {
     config: FindConfig,
 }
 
 impl FindTool {
     pub fn new() -> Self {
-        Self {
-            config: FindConfig::default(),
-        }
+        Self::default()
     }
 
     pub fn with_config(config: FindConfig) -> Self {
@@ -230,12 +228,16 @@ impl FindTool {
             "%Y-%m-%d %H:%M:%S", // 2023-01-01 12:30:45
         ];
 
-        for format in &formats {
-            if let Ok(dt) = NaiveDateTime::parse_from_str(
-                &format!("{}T00:00:00", date_str),
-                "%Y-%m-%dT%H:%M:%S",
-            ) {
-                return Some(DateTime::from_utc(dt, Utc));
+        for fmt in &formats {
+            // For date-only format, append time component if needed
+            let parse_str = if fmt == &"%Y-%m-%d" {
+                format!("{}T00:00:00", date_str)
+            } else {
+                date_str.to_string()
+            };
+
+            if let Ok(dt) = NaiveDateTime::parse_from_str(&parse_str, fmt) {
+                return Some(DateTime::from_naive_utc_and_offset(dt, Utc));
             }
         }
 

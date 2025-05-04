@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 
 /// Configuration for the GrepTool
@@ -72,11 +72,17 @@ pub struct GrepTool {
     config: GrepConfig,
 }
 
-impl GrepTool {
-    pub fn new() -> Self {
+impl Default for GrepTool {
+    fn default() -> Self {
         Self {
             config: GrepConfig::default(),
         }
+    }
+}
+
+impl GrepTool {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn with_config(config: GrepConfig) -> Self {
