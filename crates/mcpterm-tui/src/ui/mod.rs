@@ -1,4 +1,3 @@
-use ratatui::backend::Backend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::widgets::Block;
 
@@ -15,19 +14,19 @@ pub fn render(f: &mut ratatui::Frame, state: &mut AppState) {
         .split(f.area());
 
     // Render message viewer
-    render_messages::<ratatui::backend::CrosstermBackend<std::io::Stdout>>(f, state, chunks[0]);
+    render_messages(f, state, chunks[0]);
 
     // Render input editor
-    render_input::<ratatui::backend::CrosstermBackend<std::io::Stdout>>(f, state, chunks[1]);
+    render_input(f, state, chunks[1]);
 }
 
-fn render_messages<B: Backend>(f: &mut ratatui::Frame, _state: &mut AppState, area: Rect) {
+fn render_messages(f: &mut ratatui::Frame, _state: &mut AppState, area: Rect) {
     // This is a placeholder implementation
     let block = Block::default().title("Messages");
     f.render_widget(block, area);
 }
 
-fn render_input<B: Backend>(f: &mut ratatui::Frame, _state: &mut AppState, area: Rect) {
+fn render_input(f: &mut ratatui::Frame, _state: &mut AppState, area: Rect) {
     // This is a placeholder implementation
     let block = Block::default().title("Input");
     f.render_widget(block, area);

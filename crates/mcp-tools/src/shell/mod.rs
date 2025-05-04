@@ -5,11 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::process::Stdio;
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
-use wait_timeout::ChildExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ShellConfig {
@@ -22,18 +21,19 @@ pub struct ShellConfig {
 impl Default for ShellConfig {
     fn default() -> Self {
         Self {
-            default_timeout_ms: 5000,   // 5 seconds default
-            max_timeout_ms: 30000,      // 30 seconds max
-            allowed_commands: None,     // All commands allowed unless in denied list
+            default_timeout_ms: 5000, // 5 seconds default
+            max_timeout_ms: 30000,    // 30 seconds max
+            allowed_commands: None,   // All commands allowed unless in denied list
             denied_commands: Some(vec![
-                "rm -rf".to_string(),   // Prevent recursive force deletion
-                "sudo".to_string(),     // Prevent sudo
+                "rm -rf".to_string(),      // Prevent recursive force deletion
+                "sudo".to_string(),        // Prevent sudo
                 ":(){:|:&};:".to_string(), // Fork bomb
             ]),
         }
     }
 }
 
+#[derive(Default, Debug)]
 pub struct ShellTool {
     config: ShellConfig,
 }
@@ -55,7 +55,10 @@ impl ShellTool {
         if let Some(denied) = &self.config.denied_commands {
             for denied_cmd in denied {
                 if command.contains(denied_cmd) {
-                    warn!("Command '{}' contains denied pattern: {}", command, denied_cmd);
+                    warn!(
+                        "Command '{}' contains denied pattern: {}",
+                        command, denied_cmd
+                    );
                     return false;
                 }
             }
@@ -64,9 +67,9 @@ impl ShellTool {
         // Then check allowed commands if specified
         if let Some(allowed) = &self.config.allowed_commands {
             // If we have an allowed list, command must be in it
-            let is_allowed = allowed.iter().any(|allowed_cmd| {
-                command.starts_with(allowed_cmd)
-            });
+            let is_allowed = allowed
+                .iter()
+                .any(|allowed_cmd| command.starts_with(allowed_cmd));
 
             if !is_allowed {
                 warn!("Command '{}' is not in the allowed list", command);
@@ -130,9 +133,9 @@ impl Tool for ShellTool {
 
     async fn execute(&self, params: Value) -> Result<ToolResult> {
         // Extract parameters
-        let command = params["command"].as_str().ok_or_else(|| {
-            anyhow!("Missing required parameter: 'command'")
-        })?;
+        let command = params["command"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing required parameter: 'command'"))?;
 
         // Get timeout from parameters or use default
         let timeout_ms = params["timeout"]
@@ -219,15 +222,19 @@ impl Tool for ShellTool {
                     Err(anyhow!("Failed to spawn command: {}", e))
                 }
             }
-        }).await;
+        })
+        .await;
 
         // Process result
         match result {
             Ok(Ok((stdout, stderr, exit_code))) => {
                 // Command completed successfully
                 debug!("Command completed with exit code: {}", exit_code);
-                debug!("stdout: {} bytes, stderr: {} bytes", 
-                       stdout.len(), stderr.len());
+                debug!(
+                    "stdout: {} bytes, stderr: {} bytes",
+                    stdout.len(),
+                    stderr.len()
+                );
 
                 // Create a truncated version of stdout/stderr if too long
                 let truncated_stdout = if stdout.len() > 10000 {
@@ -248,19 +255,26 @@ impl Tool for ShellTool {
 
                 Ok(ToolResult {
                     tool_id: "shell".to_string(),
-                    status: if exit_code == 0 { ToolStatus::Success } else { ToolStatus::Failure },
+                    status: if exit_code == 0 {
+                        ToolStatus::Success
+                    } else {
+                        ToolStatus::Failure
+                    },
                     output: json!({
                         "stdout": truncated_stdout,
                         "stderr": truncated_stderr,
                         "exit_code": exit_code
                     }),
                     error: if exit_code != 0 {
-                        Some(format!("Command exited with non-zero status: {}", exit_code))
+                        Some(format!(
+                            "Command exited with non-zero status: {}",
+                            exit_code
+                        ))
                     } else {
                         None
                     },
                 })
-            },
+            }
             Ok(Err(e)) => {
                 // Command execution failed
                 error!("Command execution error: {}", e);
@@ -274,7 +288,7 @@ impl Tool for ShellTool {
                     }),
                     error: Some(e.to_string()),
                 })
-            },
+            }
             Err(_) => {
                 // Timeout occurred
                 warn!("Command timed out after {} ms", timeout_ms);

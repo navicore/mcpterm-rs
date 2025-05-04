@@ -34,17 +34,17 @@ impl App {
                 sleep(Duration::from_secs(120)).await; // Report every 2 minutes
                 let report = MetricsRegistry::global().generate_report();
                 info!("Generating metrics report (2-minute interval)");
-                
+
                 if let Err(e) = log_destination.send_report(&report) {
                     debug!("Error sending metrics report: {}", e);
                 }
-                
+
                 // Reset counters after reporting
                 MetricsRegistry::global().reset_counters();
                 debug!("Counters reset after metrics report");
             }
         });
-    
+
         // Placeholder implementation
         // This would set up the terminal, render loop, etc.
         Ok(())

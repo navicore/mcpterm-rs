@@ -182,7 +182,7 @@ impl McpSchemaManager {
     /// Get the system prompt addition that instructs the LLM to use MCP
     pub fn get_mcp_system_prompt(&self) -> &str {
         r#"
-You are an AI assistant that follows the Model Context Protocol (MCP). 
+You are an AI assistant that follows the Model Context Protocol (MCP).
 You MUST communicate using valid JSON in the JSON-RPC 2.0 format.
 
 Here are the rules:
@@ -230,7 +230,7 @@ Examples of available tools:
 4. "search": Search for files or content
    Parameters: { "query": "string", "path": "string" }
 
-Always ensure your responses are syntactically valid JSON. 
+Always ensure your responses are syntactically valid JSON.
 Never include multiple JSON objects in a single response.
 If you require more information or the result of a tool call, make a tool call request and wait for the result.
 "#

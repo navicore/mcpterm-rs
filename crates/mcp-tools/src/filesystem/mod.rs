@@ -40,6 +40,7 @@ impl Default for FilesystemConfig {
 }
 
 /// Base class for filesystem tools that provides common functionality
+#[derive(Default, Debug, Clone)]
 pub struct FilesystemBaseTool {
     config: FilesystemConfig,
 }
@@ -64,7 +65,10 @@ impl FilesystemBaseTool {
         if let Some(denied) = &self.config.denied_paths {
             for denied_path in denied {
                 if path_str.contains(denied_path) {
-                    warn!("Path '{}' contains denied pattern: {}", path_str, denied_path);
+                    warn!(
+                        "Path '{}' contains denied pattern: {}",
+                        path_str, denied_path
+                    );
                     return false;
                 }
             }
@@ -73,9 +77,9 @@ impl FilesystemBaseTool {
         // Then check allowed paths if specified
         if let Some(allowed) = &self.config.allowed_paths {
             // If we have an allowed list, path must be in it
-            let is_allowed = allowed.iter().any(|allowed_path| {
-                path_str.starts_with(allowed_path)
-            });
+            let is_allowed = allowed
+                .iter()
+                .any(|allowed_path| path_str.starts_with(allowed_path));
 
             if !is_allowed {
                 warn!("Path '{}' is not in the allowed list", path_str);
@@ -88,6 +92,7 @@ impl FilesystemBaseTool {
     }
 }
 
+#[derive(Default, Debug, Clone)]
 pub struct ReadFileTool {
     base: FilesystemBaseTool,
 }
@@ -142,9 +147,9 @@ impl Tool for ReadFileTool {
 
     async fn execute(&self, params: Value) -> Result<ToolResult> {
         // Extract parameters
-        let path = params["path"].as_str().ok_or_else(|| {
-            anyhow!("Missing required parameter: 'path'")
-        })?;
+        let path = params["path"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing required parameter: 'path'"))?;
 
         // Check if path is allowed
         if !self.base.is_path_allowed(path) {
@@ -186,17 +191,19 @@ impl Tool for ReadFileTool {
         // Check file size
         let metadata = fs::metadata(&path_buf)?;
         let file_size = metadata.len() as usize;
-        
+
         if file_size > self.base.config.max_file_size {
             return Ok(ToolResult {
                 tool_id: "file_read".to_string(),
                 status: ToolStatus::Failure,
                 output: json!({
-                    "error": format!("File too large: {} bytes (max: {} bytes)", 
+                    "error": format!("File too large: {} bytes (max: {} bytes)",
                                    file_size, self.base.config.max_file_size)
                 }),
-                error: Some(format!("File too large: {} bytes (max: {} bytes)", 
-                                  file_size, self.base.config.max_file_size)),
+                error: Some(format!(
+                    "File too large: {} bytes (max: {} bytes)",
+                    file_size, self.base.config.max_file_size
+                )),
             });
         }
 
@@ -205,7 +212,7 @@ impl Tool for ReadFileTool {
         match fs::read_to_string(&path_buf) {
             Ok(content) => {
                 debug!("Successfully read file: {} ({} bytes)", path, content.len());
-                
+
                 // Truncate if the file content is too large (e.g., binary files)
                 let truncated_content = if content.len() > self.base.config.max_file_size {
                     let mut trunc = content[..self.base.config.max_file_size].to_string();
@@ -214,7 +221,7 @@ impl Tool for ReadFileTool {
                 } else {
                     content
                 };
-                
+
                 Ok(ToolResult {
                     tool_id: "file_read".to_string(),
                     status: ToolStatus::Success,
@@ -240,6 +247,7 @@ impl Tool for ReadFileTool {
     }
 }
 
+#[derive(Default, Debug, Clone)]
 pub struct WriteFileTool {
     base: FilesystemBaseTool,
 }
@@ -303,14 +311,14 @@ impl Tool for WriteFileTool {
 
     async fn execute(&self, params: Value) -> Result<ToolResult> {
         // Extract parameters
-        let path = params["path"].as_str().ok_or_else(|| {
-            anyhow!("Missing required parameter: 'path'")
-        })?;
-        
-        let content = params["content"].as_str().ok_or_else(|| {
-            anyhow!("Missing required parameter: 'content'")
-        })?;
-        
+        let path = params["path"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing required parameter: 'path'"))?;
+
+        let content = params["content"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing required parameter: 'content'"))?;
+
         let append = params["append"].as_bool().unwrap_or(false);
 
         // Check if content size is allowed
@@ -319,11 +327,14 @@ impl Tool for WriteFileTool {
                 tool_id: "file_write".to_string(),
                 status: ToolStatus::Failure,
                 output: json!({
-                    "error": format!("Content too large: {} bytes (max: {} bytes)", 
+                    "error": format!("Content too large: {} bytes (max: {} bytes)",
                                    content.len(), self.base.config.max_file_size)
                 }),
-                error: Some(format!("Content too large: {} bytes (max: {} bytes)", 
-                                  content.len(), self.base.config.max_file_size)),
+                error: Some(format!(
+                    "Content too large: {} bytes (max: {} bytes)",
+                    content.len(),
+                    self.base.config.max_file_size
+                )),
             });
         }
 
@@ -376,7 +387,11 @@ impl Tool for WriteFileTool {
 
         match result {
             Ok(_) => {
-                debug!("Successfully wrote to file: {} ({} bytes)", path, content.len());
+                debug!(
+                    "Successfully wrote to file: {} ({} bytes)",
+                    path,
+                    content.len()
+                );
                 Ok(ToolResult {
                     tool_id: "file_write".to_string(),
                     status: ToolStatus::Success,
@@ -402,6 +417,7 @@ impl Tool for WriteFileTool {
     }
 }
 
+#[derive(Default, Debug, Clone)]
 pub struct ListDirectoryTool {
     base: FilesystemBaseTool,
 }
@@ -469,9 +485,9 @@ impl Tool for ListDirectoryTool {
 
     async fn execute(&self, params: Value) -> Result<ToolResult> {
         // Extract parameters
-        let path = params["path"].as_str().ok_or_else(|| {
-            anyhow!("Missing required parameter: 'path'")
-        })?;
+        let path = params["path"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing required parameter: 'path'"))?;
 
         // Check if path is allowed
         if !self.base.is_path_allowed(path) {
@@ -520,7 +536,7 @@ impl Tool for ListDirectoryTool {
                         Ok(entry) => {
                             let entry_path = entry.path();
                             let file_name = entry.file_name().to_string_lossy().to_string();
-                            
+
                             let entry_type = if entry_path.is_file() {
                                 "file"
                             } else if entry_path.is_dir() {
@@ -530,7 +546,7 @@ impl Tool for ListDirectoryTool {
                             } else {
                                 "other"
                             };
-                            
+
                             let size = if entry_path.is_file() {
                                 match fs::metadata(&entry_path) {
                                     Ok(metadata) => metadata.len() as i64,
@@ -539,7 +555,7 @@ impl Tool for ListDirectoryTool {
                             } else {
                                 -1
                             };
-                            
+
                             entry_list.push(json!({
                                 "name": file_name,
                                 "path": entry_path.to_string_lossy(),
@@ -553,9 +569,13 @@ impl Tool for ListDirectoryTool {
                         }
                     }
                 }
-                
-                debug!("Successfully listed directory: {} ({} entries)", path, entry_list.len());
-                
+
+                debug!(
+                    "Successfully listed directory: {} ({} entries)",
+                    path,
+                    entry_list.len()
+                );
+
                 Ok(ToolResult {
                     tool_id: "directory_list".to_string(),
                     status: ToolStatus::Success,

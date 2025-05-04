@@ -183,7 +183,7 @@ pub enum KeyCode {
 }
 
 /// Simplified key modifiers
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct KeyModifiers {
     pub ctrl: bool,
     pub alt: bool,
@@ -196,15 +196,6 @@ impl EventType for ModelEvent {}
 impl EventType for ApiEvent {}
 
 // Default implementations for KeyModifiers
-impl Default for KeyModifiers {
-    fn default() -> Self {
-        Self {
-            ctrl: false,
-            alt: false,
-            shift: false,
-        }
-    }
-}
 
 // Helper methods for KeyCode
 impl KeyCode {

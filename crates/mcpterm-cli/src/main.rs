@@ -51,15 +51,15 @@ struct Cli {
     /// Enable verbose logging
     #[clap(long)]
     verbose: bool,
-    
+
     /// Enable tool execution
     #[clap(long)]
     tools: bool,
-    
+
     /// Disable tool execution
     #[clap(long)]
     no_tools: bool,
-    
+
     /// Skip confirmation for tool execution
     #[clap(long)]
     no_tool_confirmation: bool,
@@ -131,10 +131,13 @@ async fn main() -> Result<()> {
         streaming: !cli.no_streaming,
         enable_tools: if cli.no_tools {
             false
-        } else if cli.tools {
-            true
         } else {
-            true // Default to enabled
+            match cli.tools {
+                true => true,
+                false => {
+                    true // Default to enabled
+                }
+            }
         },
         require_tool_confirmation: !cli.no_tool_confirmation,
     };
@@ -161,13 +164,16 @@ async fn main() -> Result<()> {
             debug!("Processing single prompt");
             let _response = app.run(&prompt).await?;
             // Response is already printed in app.run
-            
+
             // Add a deliberate delay for tool responses
             debug!("Waiting for any follow-up responses...");
             sleep(Duration::from_secs(3)).await;
-            
+
             // Add some diagnostic logs to help debug tool response issues
-            info!("Context size after processing: {} messages", app.debug_context_size());
+            info!(
+                "Context size after processing: {} messages",
+                app.debug_context_size()
+            );
             debug!("Last 3 message roles: {}", app.debug_last_message_roles(3));
             debug!("Processing complete");
         } else if let Some(input_file) = cli.input {
@@ -217,9 +223,12 @@ async fn run_interactive_mode(app: &mut CliApp) -> Result<()> {
             Ok(_) => {
                 // Add a short delay for tool responses in interactive mode
                 sleep(Duration::from_millis(500)).await;
-                
+
                 // Log context size and roles for debugging
-                debug!("Context size after command: {} messages", app.debug_context_size());
+                debug!(
+                    "Context size after command: {} messages",
+                    app.debug_context_size()
+                );
                 debug!("Last 3 message roles: {}", app.debug_last_message_roles(3));
             }
             Err(e) => eprintln!("Error: {}", e),

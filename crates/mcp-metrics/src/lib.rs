@@ -254,9 +254,9 @@ mod tests {
         registry.reset_counters();
         // Clear existing gauges by setting them to 0
         let report = registry.generate_report();
-        for (name, _) in &report.gauges {
+        report.gauges.iter().for_each(|(name, _)| {
             registry.set_gauge(name, 0);
-        }
+        });
 
         registry.set_gauge("test.gauge", 42);
 
@@ -276,9 +276,9 @@ mod tests {
         registry.reset_counters();
         // Clear existing gauges by setting them to 0
         let report = registry.generate_report();
-        for (name, _) in &report.gauges {
+        report.gauges.iter().for_each(|(name, _)| {
             registry.set_gauge(name, 0);
-        }
+        });
 
         let duration = Duration::from_millis(123);
         registry.record_duration("test.duration", duration);
@@ -348,6 +348,6 @@ mod tests {
         // Check gauge and timer values
         let report = registry.generate_report();
         assert_eq!(report.gauges.get("macro.simple.gauge"), Some(&42));
-        assert!(report.gauges.get("macro.simple.timer").is_some());
+        assert!(report.gauges.contains_key("macro.simple.timer"));
     }
 }

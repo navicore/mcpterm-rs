@@ -6,7 +6,7 @@ use aws_sdk_bedrockruntime::Client as BedrockRuntimeClient;
 use aws_smithy_types::Blob;
 use futures::Stream;
 use mcp_core::context::{ConversationContext, MessageRole};
-use mcp_core::prompts::{PromptManager, PromptType, TemplateEngine};
+use mcp_core::prompts::{PromptManager, TemplateEngine};
 use mcp_core::protocol::{Request as McpRequest, Response as McpResponse};
 use mcp_metrics::{count, time};
 use serde::{Deserialize, Serialize};
@@ -224,23 +224,26 @@ impl BedrockClient {
 
         // Create a template engine with variables for the system prompt
         let mut engine = TemplateEngine::new();
-        
+
         // Add model-specific variables
         engine.set_var("model_id", &self.config.model_id);
         engine.set_var("max_tokens", &self.config.max_tokens.to_string());
-        
+
         // Add session info
         engine.set_var("conversation_length", &context.messages.len().to_string());
-        
+
         // Get the system prompt from the prompt manager with template variables substituted
         let mut system_prompt = self.prompt_manager.get_rendered_system_prompt(&engine);
-        
+
         // Add custom prompt if provided in config
         if let Some(custom_prompt) = &self.config.system_prompt {
             system_prompt = format!("{}\n\n{}", system_prompt, custom_prompt);
         }
-        
-        debug!("Using system prompt with {} characters", system_prompt.len());
+
+        debug!(
+            "Using system prompt with {} characters",
+            system_prompt.len()
+        );
         trace!("System prompt content: {}", system_prompt);
 
         // Convert conversation messages to Claude format
@@ -252,13 +255,21 @@ impl BedrockClient {
                 MessageRole::System => continue,
                 // Tool results require special handling for Claude
                 MessageRole::Tool => {
-                    trace!("Converting tool message to specialized assistant message: {}", message.content);
-                    
+                    trace!(
+                        "Converting tool message to specialized assistant message: {}",
+                        message.content
+                    );
+
                     // Parse the tool message if it's in JSON-RPC format
-                    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&message.content) {
+                    if let Ok(json_value) =
+                        serde_json::from_str::<serde_json::Value>(&message.content)
+                    {
                         // First, log the raw tool result at trace level
-                        trace!("Tool result JSON: {}", serde_json::to_string_pretty(&json_value).unwrap_or_default());
-                        
+                        trace!(
+                            "Tool result JSON: {}",
+                            serde_json::to_string_pretty(&json_value).unwrap_or_default()
+                        );
+
                         // Check if it has the JSON-RPC result field
                         if let Some(result) = json_value.get("result") {
                             // Format as a special tool result message for Claude
@@ -266,26 +277,26 @@ impl BedrockClient {
                                 "I've received the following tool result:\n```json\n{}\n```\n\nNow I need to provide a direct answer based on this result.",
                                 serde_json::to_string_pretty(result).unwrap_or_else(|_| result.to_string())
                             );
-                            
+
                             trace!("Created specialized tool result message: {}", tool_msg);
-                            
+
                             let content = ClaudeContent {
                                 content_type: "text".to_string(),
                                 text: tool_msg,
                             };
-                            
+
                             claude_messages.push(ClaudeMessage {
                                 role: "assistant".to_string(),
                                 content: vec![content],
                             });
-                            
+
                             continue;
                         }
                     }
-                    
+
                     // Fallback for non-JSON tool results
                     "assistant"
-                },
+                }
             };
 
             // For regular messages (or fallback for tool messages)
@@ -407,17 +418,19 @@ impl LlmClient for BedrockClient {
             let mut active_requests = self.active_requests.lock().unwrap();
             active_requests.insert(request_id.clone(), false);
         }
-        
+
         // Count API calls
         count!("llm.calls.total");
         count!("llm.calls.bedrock");
-        
+
         // Prepare the Claude-specific payload
         let claude_payload = self.prepare_claude_payload(context);
         let payload_bytes = serde_json::to_vec(&claude_payload)?;
-        
+
         // Count tokens (approximation)
-        let input_tokens = context.messages.iter()
+        let input_tokens = context
+            .messages
+            .iter()
             .map(|m| m.content.len() / 4)
             .sum::<usize>();
         count!("llm.tokens.input", input_tokens as u64);
@@ -433,7 +446,7 @@ impl LlmClient for BedrockClient {
             "Raw JSON request payload to Bedrock: {}",
             serde_json::to_string_pretty(&claude_payload).unwrap_or_default()
         );
-        
+
         // Log the message history being sent to Claude for each role
         for (i, msg) in claude_payload.messages.iter().enumerate() {
             trace!(
@@ -460,7 +473,7 @@ impl LlmClient for BedrockClient {
                     // Count error
                     count!("llm.errors");
                     count!("llm.errors.bedrock");
-                    
+
                     // Remove from active requests
                     let mut active_requests = self.active_requests.lock().unwrap();
                     active_requests.remove(&request_id);
@@ -506,25 +519,25 @@ impl LlmClient for BedrockClient {
                 );
 
                 let response = self.parse_claude_response(&claude_response)?;
-                
+
                 // Count output tokens (rough approximation)
                 let output_tokens = response.content.len() / 4;
                 count!("llm.tokens.output", output_tokens as u64);
-                
+
                 // Count successful completion
                 count!("llm.completions.success");
-                
+
                 // Count tool calls if any
                 if !response.tool_calls.is_empty() {
                     count!("llm.tool_calls", response.tool_calls.len() as u64);
                 }
-                
+
                 Ok(response)
             }
             Err(err) => {
                 warn!("Failed to parse Claude response: {}", err);
                 warn!("Response string: {}", response_str);
-                
+
                 // Count parsing error
                 count!("llm.errors.parsing");
 
@@ -537,11 +550,11 @@ impl LlmClient for BedrockClient {
                     if let Some(content) = json_value.get("content") {
                         if let Some(text) = content.as_str() {
                             debug!("Extracted content from non-standard response");
-                            
+
                             // Count output tokens (rough approximation)
                             let output_tokens = text.len() / 4;
                             count!("llm.tokens.output", output_tokens as u64);
-                            
+
                             return Ok(LlmResponse {
                                 id: request_id,
                                 content: text.to_string(),
@@ -552,11 +565,11 @@ impl LlmClient for BedrockClient {
 
                     // Return the raw JSON as content as a last resort
                     debug!("Returning raw JSON as content");
-                    
+
                     // Count output tokens (rough approximation)
                     let output_tokens = response_str.len() / 4;
                     count!("llm.tokens.output", output_tokens as u64);
-                    
+
                     return Ok(LlmResponse {
                         id: request_id,
                         content: response_str,
@@ -598,7 +611,7 @@ impl LlmClient for BedrockClient {
             "Raw streaming JSON request payload to Bedrock: {}",
             serde_json::to_string_pretty(&claude_payload).unwrap_or_default()
         );
-        
+
         // Log the message history being sent to Claude for each role
         for (i, msg) in claude_payload.messages.iter().enumerate() {
             trace!(

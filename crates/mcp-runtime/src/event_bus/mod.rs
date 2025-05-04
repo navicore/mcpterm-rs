@@ -8,11 +8,6 @@ pub use events::*;
 mod tests {
     use super::*;
     use crossbeam_channel::unbounded;
-    use std::sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    };
-    use tokio::time::{sleep, Duration};
 
     #[tokio::test]
     async fn test_event_creation() {

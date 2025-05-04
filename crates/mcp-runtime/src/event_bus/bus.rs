@@ -3,7 +3,7 @@ use crossbeam_channel::{self, bounded, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use tracing::{debug, info, warn};
 
-use super::events::{ApiEvent, EventHandler, EventHandlerTrait, EventType, ModelEvent, UiEvent};
+use super::events::{ApiEvent, EventHandler, EventType, ModelEvent, UiEvent};
 
 const DEFAULT_BUFFER_SIZE: usize = 100;
 
@@ -245,7 +245,6 @@ mod tests {
     #[tokio::test]
     async fn test_event_bus_creation() {
         let _bus = EventBus::new();
-        assert!(true, "Event bus created successfully");
     }
 
     #[tokio::test(flavor = "multi_thread")]
