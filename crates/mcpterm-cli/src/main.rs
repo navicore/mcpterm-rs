@@ -7,7 +7,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
     }
 
     // Log initial messages with tracing
-    info!("Starting mcpterm-cli with tracing");
+    debug!("Starting mcpterm-cli with tracing");
     debug!("Log level debugging enabled");
     trace!("Log level tracing enabled - will show detailed API requests/responses");
 
@@ -170,7 +170,7 @@ async fn main() -> Result<()> {
             sleep(Duration::from_secs(3)).await;
 
             // Add some diagnostic logs to help debug tool response issues
-            info!(
+            debug!(
                 "Context size after processing: {} messages",
                 app.debug_context_size()
             );
@@ -187,7 +187,7 @@ async fn main() -> Result<()> {
     }
 
     // Log metrics report at info level before exiting
-    info!("Generating metrics summary for this CLI execution");
+    debug!("Generating metrics summary for this CLI execution");
     let log_destination = LogDestination;
     let report = MetricsRegistry::global().generate_report();
     if let Err(e) = log_destination.send_report(&report) {
