@@ -29,6 +29,7 @@ mcpterm-tui = { path = "crates/mcpterm-tui" }
 # Required for main.rs
 anyhow = "1.0.75"
 tokio = { version = "1.28.0", features = ["full"] }
+atty = "0.2.14"
 
 [workspace.dependencies]
 # Terminal UI

@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use mcp_core::{init_tracing, set_verbose_logging, Config};
 use mcp_metrics::{LogDestination, MetricsDestination, MetricsRegistry};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -64,6 +64,10 @@ pub struct Cli {
     /// Skip confirmation for tool execution
     #[clap(long)]
     no_tool_confirmation: bool,
+    
+    /// Automatically approve all tool executions
+    #[clap(long, short = 'y')]
+    yes: bool,
 }
 
 pub async fn main() -> Result<()> {
@@ -123,6 +127,21 @@ pub async fn main() -> Result<()> {
 
     debug!("Using model: {}", model_config.model_id);
 
+    // Check if stdin input is being used
+    let using_stdin_input = std::env::var("MCP_STDIN_INPUT").is_ok();
+    
+    // If using stdin with piped input, provide appropriate warnings
+    if using_stdin_input {
+        if cli.yes || cli.no_tool_confirmation {
+            println!("Warning: Reading from stdin with auto-approval enabled.");
+            println!("Any tool commands from the LLM will be executed without confirmation.");
+        } else {
+            println!("Warning: Reading from stdin. Tool executions will require confirmation.");
+            println!("Use --yes to automatically approve tool executions when using pipes.");
+            println!("This may cause prompts to hang waiting for approval.");
+        }
+    }
+    
     // Create CLI configuration
     let cli_config = CliConfig {
         model: model_config.model_id.clone(),
@@ -140,6 +159,7 @@ pub async fn main() -> Result<()> {
             }
         },
         require_tool_confirmation: !cli.no_tool_confirmation,
+        auto_approve_tools: cli.yes,
     };
 
     debug!("CLI config: {:#?}", cli_config);
@@ -159,9 +179,13 @@ pub async fn main() -> Result<()> {
         debug!("Starting interactive mode");
         run_interactive_mode(&mut app).await?;
     } else {
-        // Process single prompt or input file
+        // Process input according to the following hierarchy:
+        // 1. Command-line prompt
+        // 2. Input file
+        // 3. Piped stdin
+        // 4. Error if none of the above
         if let Some(prompt) = cli.prompt {
-            debug!("Processing single prompt");
+            debug!("Processing single prompt from command line argument");
             let _response = app.run(&prompt).await?;
             // Response is already printed in app.run
 
@@ -179,9 +203,37 @@ pub async fn main() -> Result<()> {
         } else if let Some(input_file) = cli.input {
             debug!("Processing input file: {}", input_file);
             process_input_file(&mut app, &input_file, cli.output).await?;
+        } else if std::env::var("MCP_STDIN_INPUT").is_ok() {
+            // Read from stdin
+            debug!("Reading prompt from stdin");
+            println!("Reading prompt from stdin...");
+            let mut input = String::new();
+            // Read directly from stdin
+            std::io::stdin().read_to_string(&mut input)?;
+            
+            if !input.trim().is_empty() {
+                println!("Processing prompt ({} characters)...", input.len());
+                debug!("Processing prompt from stdin, length: {}", input.len());
+                let _response = app.run(&input).await?;
+                
+                // Add a deliberate delay for tool responses
+                debug!("Waiting for any follow-up responses...");
+                sleep(Duration::from_secs(3)).await;
+                
+                debug!(
+                    "Context size after processing: {} messages",
+                    app.debug_context_size()
+                );
+                debug!("Last 3 message roles: {}", app.debug_last_message_roles(3));
+                debug!("Processing complete");
+            } else {
+                debug!("Empty input from stdin");
+                eprintln!("Error: Empty input from stdin");
+                std::process::exit(1);
+            }
         } else {
-            debug!("No prompt or input file provided");
-            eprintln!("Error: No prompt or input file provided");
+            debug!("No prompt, input file, or stdin input provided");
+            eprintln!("Error: No prompt or input provided. Use a command line argument, --input file, or pipe content to stdin.");
             std::process::exit(1);
         }
     }
