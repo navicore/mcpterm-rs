@@ -146,7 +146,7 @@ impl ResponseFormatter {
         .unwrap();
 
         // Try to format the output in a human-friendly way based on tool ID
-        writeln!(&mut output, "").unwrap();
+        writeln!(&mut output).unwrap();
         match result.tool_id.as_str() {
             "shell" => Self::format_shell_output(&mut output, &result.output),
             "read_file" => Self::format_file_output(&mut output, &result.output),
@@ -172,7 +172,7 @@ impl ResponseFormatter {
     }
 
     /// Format shell command output
-    fn format_shell_output(output: &mut String, result: &Value) -> () {
+    fn format_shell_output(output: &mut String, result: &Value) {
         // Extract details from the shell result
         let command = result
             .get("command")
@@ -242,7 +242,7 @@ impl ResponseFormatter {
     }
 
     /// Format file read output
-    fn format_file_output(output: &mut String, result: &Value) -> () {
+    fn format_file_output(output: &mut String, result: &Value) {
         // Extract details from the file result
         let path = result
             .get("path")
@@ -298,7 +298,7 @@ impl ResponseFormatter {
     }
 
     /// Format file write output
-    fn format_write_output(output: &mut String, result: &Value) -> () {
+    fn format_write_output(output: &mut String, result: &Value) {
         // Extract details from the write result
         let path = result
             .get("path")
@@ -358,7 +358,7 @@ impl ResponseFormatter {
     }
 
     /// Format directory listing output
-    fn format_directory_output(output: &mut String, result: &Value) -> () {
+    fn format_directory_output(output: &mut String, result: &Value) {
         // Extract details from the directory listing
         let path = result
             .get("path")
@@ -454,7 +454,7 @@ impl ResponseFormatter {
     }
 
     /// Format generic tool output
-    fn format_generic_output(output: &mut String, result: &Value) -> () {
+    fn format_generic_output(output: &mut String, result: &Value) {
         // For tools we don't have specific formatters for, pretty-print the JSON with syntax highlighting
         match serde_json::to_string_pretty(result) {
             Ok(pretty_json) => {
@@ -519,7 +519,7 @@ impl ResponseFormatter {
                 ':' if !in_string => {
                     result.push_str(Colors::reset());
                     result.push(c);
-                    result.push_str(" "); // Add a space after colons for readability
+                    result.push(' '); // Add a space after colons for readability
                 }
                 ',' if !in_string => {
                     result.push_str(Colors::reset());
@@ -541,7 +541,7 @@ impl ResponseFormatter {
                     result.push_str(Colors::reset());
                 }
                 _ => {
-                    if !in_string && (c >= '0' && c <= '9') {
+                    if !in_string && c.is_ascii_digit() {
                         result.push_str(Colors::yellow()); // Numbers in yellow
                         result.push(c);
                         result.push_str(Colors::reset());
@@ -708,7 +708,7 @@ impl ResponseFormatter {
 /// 1. LlmResponse with a "content" field from mcp-llm
 /// 2. MCP JSON-RPC Response with a "result" field in the protocol
 /// 3. Claude API response with content[].text containing JSON-RPC response
-/// This formatter handles all cases
+///    This formatter handles all cases
 pub fn format_llm_response(content: &str) -> String {
     // For valid JSON, extract content according to our schema
     if content.trim().starts_with('{') && content.trim().ends_with('}') {

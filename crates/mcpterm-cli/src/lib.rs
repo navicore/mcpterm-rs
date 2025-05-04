@@ -391,7 +391,7 @@ impl CliApp {
 
                     // If we have completed a chunk or this is the final chunk, process the buffer
                     if chunk.is_complete
-                        || (is_current_buffer_tool_call == false && chunk.content.contains("\n"))
+                        || !is_current_buffer_tool_call && chunk.content.contains("\n")
                     {
                         // Only print if it's NOT part of a tool call
                         if !is_current_buffer_tool_call && !content_buffer.is_empty() {
