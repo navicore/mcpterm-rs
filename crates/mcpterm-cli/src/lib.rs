@@ -35,6 +35,7 @@ struct FollowUpResponse {
 // Export our modules
 pub mod formatter;
 pub mod mock;
+pub mod cli_main;
 
 pub struct CliApp {
     context: ConversationContext,

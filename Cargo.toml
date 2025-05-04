@@ -10,6 +10,26 @@ members = [
     "crates/mcpterm-cli"
 ]
 
+[package]
+name = "mcp"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Terminal-based AI coding assistant using MCP protocol"
+
+[[bin]]
+name = "mcp"
+path = "src/main.rs"
+
+[dependencies]
+# Our internal crates
+mcpterm-cli = { path = "crates/mcpterm-cli" }
+mcpterm-tui = { path = "crates/mcpterm-tui" }
+
+# Required for main.rs
+anyhow = "1.0.75"
+tokio = { version = "1.28.0", features = ["full"] }
+
 [workspace.dependencies]
 # Terminal UI
 ratatui = "0.29.0"
