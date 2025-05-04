@@ -138,29 +138,30 @@ pub struct LogDestination;
 
 impl MetricsDestination for LogDestination {
     fn send_report(&self, report: &MetricsReport) -> Result<(), String> {
+        // log metrics if in debug mode - future implementation could send to a metrics service
         let timestamp = chrono::DateTime::<chrono::Utc>::from(
             UNIX_EPOCH + Duration::from_secs(report.timestamp),
         )
         .format("%Y-%m-%d %H:%M:%S UTC");
 
         // Log header
-        log::info!("===== Metrics Report: {} =====", timestamp);
-        log::info!("App Version: {}", report.app_version);
-        log::info!("Interval: {} seconds", report.interval_seconds);
+        log::debug!("===== Metrics Report: {} =====", timestamp);
+        log::debug!("App Version: {}", report.app_version);
+        log::debug!("Interval: {} seconds", report.interval_seconds);
 
         // Log counters
-        log::info!("--- Counters ---");
+        log::debug!("--- Counters ---");
         for (name, value) in &report.counters {
-            log::info!("{}: {}", name, value);
+            log::debug!("{}: {}", name, value);
         }
 
         // Log gauges
-        log::info!("--- Gauges ---");
+        log::debug!("--- Gauges ---");
         for (name, value) in &report.gauges {
-            log::info!("{}: {}", name, value);
+            log::debug!("{}: {}", name, value);
         }
 
-        log::info!("===== End Metrics Report =====");
+        log::debug!("===== End Metrics Report =====");
 
         Ok(())
     }

@@ -129,7 +129,7 @@ impl CliApp {
             });
         }
 
-        info!("Executing tool: {} with params: {}", tool_id, params);
+        debug!("Executing tool: {} with params: {}", tool_id, params);
 
         // Get user confirmation if required
         if self.config.require_tool_confirmation {
@@ -143,7 +143,7 @@ impl CliApp {
             std::io::stdin().read_line(&mut input).unwrap();
 
             if !input.trim().eq_ignore_ascii_case("y") {
-                info!("Tool execution denied by user");
+                debug!("Tool execution denied by user");
                 return Ok(ToolResult {
                     tool_id: tool_id.to_string(),
                     status: ToolStatus::Failure,
@@ -407,7 +407,7 @@ impl CliApp {
                                         // Check if we had a tool call and need a follow-up
                                         if chunk.is_tool_call {
                                             // Get a follow-up response with the tool results
-                                            info!(
+                                            debug!(
                                                 "Getting follow-up response with tool results..."
                                             );
 
@@ -444,8 +444,7 @@ impl CliApp {
                                                                 }
 
                                                                 if follow_up_chunk.is_complete {
-                                                                    println!();
-                                                                    info!("Follow-up response complete, breaking from stream loop");
+                                                                    debug!("Follow-up response complete, breaking from stream loop");
                                                                     break;
                                                                 }
                                                             }
@@ -496,7 +495,7 @@ impl CliApp {
                                                             .add_assistant_message(&instruction);
 
                                                         // Try one more time with an explicit request for a response
-                                                        info!("Getting follow-up response with explicit instruction...");
+                                                        debug!("Getting follow-up response with explicit instruction...");
 
                                                         // Sleep a bit before retry
                                                         tokio::time::sleep(
@@ -718,7 +717,7 @@ impl CliApp {
                     let tool_name = &tool_call.tool;
                     let params = &tool_call.params;
 
-                    info!("Processing tool call: {}", tool_name);
+                    debug!("Processing tool call: {}", tool_name);
 
                     // Execute the tool
                     let tool_result = self.execute_tool(tool_name, params.clone()).await;
@@ -780,7 +779,7 @@ impl CliApp {
                 }
 
                 // Get a new response with the tool results
-                info!("Getting follow-up response with tool results...");
+                debug!("Getting follow-up response with tool results...");
                 // At this point, the client variable from earlier is no longer being used
                 // Get a fresh reference to the LLM client
                 let client = self.llm_client.as_ref().unwrap();
@@ -816,7 +815,7 @@ impl CliApp {
                     self.context.add_assistant_message(&instruction);
 
                     // Try one more time with an explicit request for a response
-                    info!("Getting follow-up response with explicit instruction...");
+                    debug!("Getting follow-up response with explicit instruction...");
 
                     // Sleep a bit before retry
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -885,7 +884,7 @@ impl CliApp {
                     debug!("Received valid follow-up response after tool execution: length={} chars, content: {}",
                            follow_up_response.content.len(), follow_up_response.content);
 
-                    info!(
+                    debug!(
                         "Received follow-up response after tool execution: length={} chars",
                         follow_up_response.content.len()
                     );
