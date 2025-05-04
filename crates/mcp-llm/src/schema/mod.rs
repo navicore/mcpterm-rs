@@ -7,7 +7,7 @@ use thiserror::Error;
 pub enum SchemaError {
     #[error("Schema validation error: {0}")]
     ValidationError(String),
-    
+
     #[error("Schema compilation error: {0}")]
     CompilationError(String),
 }
@@ -35,11 +35,11 @@ impl McpSchemaManager {
             "type": "object",
             "required": ["jsonrpc", "method", "params", "id"],
             "properties": {
-                "jsonrpc": { 
+                "jsonrpc": {
                     "type": "string",
                     "enum": ["2.0"]
                 },
-                "method": { 
+                "method": {
                     "type": "string"
                 },
                 "params": {
@@ -53,7 +53,7 @@ impl McpSchemaManager {
                 }
             }
         });
-        
+
         // JSON-RPC 2.0 Response Schema
         let response_schema_json = json!({
             "$schema": "http://json-schema.org/draft-07/schema#",
@@ -64,7 +64,7 @@ impl McpSchemaManager {
                 {
                     "required": ["result"],
                     "properties": {
-                        "jsonrpc": { 
+                        "jsonrpc": {
                             "type": "string",
                             "enum": ["2.0"]
                         },
@@ -83,7 +83,7 @@ impl McpSchemaManager {
                 {
                     "required": ["error"],
                     "properties": {
-                        "jsonrpc": { 
+                        "jsonrpc": {
                             "type": "string",
                             "enum": ["2.0"]
                         },
@@ -107,7 +107,7 @@ impl McpSchemaManager {
                 }
             ]
         });
-        
+
         // Tool Call Schema
         let tool_call_schema_json = json!({
             "$schema": "http://json-schema.org/draft-07/schema#",
@@ -119,22 +119,22 @@ impl McpSchemaManager {
                 "parameters": { "type": "object" }
             }
         });
-        
+
         // Compile schemas
-        let request_schema = Self::compile_schema(request_schema_json)
-            .expect("Failed to compile request schema");
-        let response_schema = Self::compile_schema(response_schema_json)
-            .expect("Failed to compile response schema");
+        let request_schema =
+            Self::compile_schema(request_schema_json).expect("Failed to compile request schema");
+        let response_schema =
+            Self::compile_schema(response_schema_json).expect("Failed to compile response schema");
         let tool_call_schema = Self::compile_schema(tool_call_schema_json)
             .expect("Failed to compile tool call schema");
-        
+
         Self {
             request_schema,
             response_schema,
             tool_call_schema,
         }
     }
-    
+
     // Compile a schema from JSON
     fn compile_schema(schema_json: serde_json::Value) -> Result<JSONSchema, SchemaError> {
         JSONSchema::options()
@@ -142,37 +142,43 @@ impl McpSchemaManager {
             .compile(&schema_json)
             .map_err(|e| SchemaError::CompilationError(e.to_string()))
     }
-    
+
     /// Validate a JSON-RPC request
     pub fn validate_request(&self, request_json: &serde_json::Value) -> Result<(), SchemaError> {
-        self.request_schema.validate(request_json)
+        self.request_schema
+            .validate(request_json)
             .map_err(|errors| {
                 let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
                 SchemaError::ValidationError(error_messages.join(", "))
             })?;
         Ok(())
     }
-    
+
     /// Validate a JSON-RPC response
     pub fn validate_response(&self, response_json: &serde_json::Value) -> Result<(), SchemaError> {
-        self.response_schema.validate(response_json)
+        self.response_schema
+            .validate(response_json)
             .map_err(|errors| {
                 let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
                 SchemaError::ValidationError(error_messages.join(", "))
             })?;
         Ok(())
     }
-    
+
     /// Validate a tool call
-    pub fn validate_tool_call(&self, tool_call_json: &serde_json::Value) -> Result<(), SchemaError> {
-        self.tool_call_schema.validate(tool_call_json)
+    pub fn validate_tool_call(
+        &self,
+        tool_call_json: &serde_json::Value,
+    ) -> Result<(), SchemaError> {
+        self.tool_call_schema
+            .validate(tool_call_json)
             .map_err(|errors| {
                 let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
                 SchemaError::ValidationError(error_messages.join(", "))
             })?;
         Ok(())
     }
-    
+
     /// Get the system prompt addition that instructs the LLM to use MCP
     pub fn get_mcp_system_prompt(&self) -> &str {
         r#"
@@ -234,11 +240,11 @@ If you require more information or the result of a tool call, make a tool call r
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_schema_validation_request() {
         let schema_manager = McpSchemaManager::new();
-        
+
         // Valid request
         let valid_request = json!({
             "jsonrpc": "2.0",
@@ -251,9 +257,9 @@ mod tests {
             },
             "id": "req_123"
         });
-        
+
         assert!(schema_manager.validate_request(&valid_request).is_ok());
-        
+
         // Invalid request (missing method)
         let invalid_request = json!({
             "jsonrpc": "2.0",
@@ -265,23 +271,23 @@ mod tests {
             },
             "id": "req_123"
         });
-        
+
         assert!(schema_manager.validate_request(&invalid_request).is_err());
     }
-    
+
     #[test]
     fn test_schema_validation_response() {
         let schema_manager = McpSchemaManager::new();
-        
+
         // Valid response
         let valid_response = json!({
             "jsonrpc": "2.0",
             "result": "This is a test response",
             "id": "req_123"
         });
-        
+
         assert!(schema_manager.validate_response(&valid_response).is_ok());
-        
+
         // Valid error response
         let valid_error = json!({
             "jsonrpc": "2.0",
@@ -291,9 +297,9 @@ mod tests {
             },
             "id": "req_123"
         });
-        
+
         assert!(schema_manager.validate_response(&valid_error).is_ok());
-        
+
         // Invalid response (both result and error)
         let invalid_response = json!({
             "jsonrpc": "2.0",
@@ -304,7 +310,7 @@ mod tests {
             },
             "id": "req_123"
         });
-        
+
         assert!(schema_manager.validate_response(&invalid_response).is_err());
     }
 }

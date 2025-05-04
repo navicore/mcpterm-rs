@@ -1,6 +1,6 @@
 use crate::client_trait::{LlmClient, LlmResponse, StreamChunk, ToolCall as ClientToolCall};
 use crate::schema::McpSchemaManager;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use aws_sdk_bedrockruntime::Client as BedrockRuntimeClient;
 use aws_smithy_types::Blob;
@@ -11,21 +11,21 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
+use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
-use tracing::{warn, debug, error, trace, info};
 
 // Bedrock specific errors
 #[derive(Debug, thiserror::Error)]
 pub enum BedrockError {
     #[error("Failed to parse Bedrock response: {0}")]
     ResponseParseError(String),
-    
+
     #[error("Invalid MCP response format: {0}")]
     InvalidMcpFormat(String),
-    
+
     #[error("Bedrock API error: {0}")]
     ApiError(String),
-    
+
     #[error("Request cancelled")]
     Cancelled,
 }
@@ -60,7 +60,7 @@ impl BedrockConfig {
             top_p: 0.9,
         }
     }
-    
+
     pub fn claude() -> Self {
         Self::new("anthropic.claude-3-sonnet-20240229-v1:0")
     }
@@ -189,10 +189,10 @@ impl BedrockClient {
                 region_string: region.clone(),
             });
             // Leak this box to create a 'static reference
-            // This is safe in this context as we need the region string to live for 
+            // This is safe in this context as we need the region string to live for
             // the entire duration of the application
             let region_static = Box::leak(region_holder);
-            
+
             aws_config::defaults(aws_config::BehaviorVersion::latest())
                 .region(region_static.region_string.as_str())
                 .load()
@@ -202,10 +202,10 @@ impl BedrockClient {
                 .load()
                 .await
         };
-        
+
         // Create Bedrock runtime client
         let client = BedrockRuntimeClient::new(&aws_config);
-        
+
         Ok(Self {
             client,
             config,
@@ -213,19 +213,21 @@ impl BedrockClient {
             active_requests: Arc::new(Mutex::new(HashMap::new())),
         })
     }
-    
+
     // Helper method to convert conversation context to Claude format
     fn prepare_claude_payload(&self, context: &ConversationContext) -> ClaudePayload {
         let mut claude_messages = Vec::new();
-        
+
         // Get the enhanced system prompt (including MCP instructions)
         let system_prompt = match &self.config.system_prompt {
-            Some(custom_prompt) => format!("{}\n\n{}", 
-                                          self.schema_manager.get_mcp_system_prompt(), 
-                                          custom_prompt),
+            Some(custom_prompt) => format!(
+                "{}\n\n{}",
+                self.schema_manager.get_mcp_system_prompt(),
+                custom_prompt
+            ),
             None => self.schema_manager.get_mcp_system_prompt().to_string(),
         };
-        
+
         // Convert conversation messages to Claude format
         for message in &context.messages {
             let role = match message.role {
@@ -236,18 +238,18 @@ impl BedrockClient {
                 // Tool results should be added as assistant messages
                 MessageRole::Tool => "assistant",
             };
-            
+
             let content = ClaudeContent {
                 content_type: "text".to_string(),
                 text: message.content.clone(),
             };
-            
+
             claude_messages.push(ClaudeMessage {
                 role: role.to_string(),
                 content: vec![content],
             });
         }
-        
+
         ClaudePayload {
             anthropic_version: "bedrock-2023-05-31".to_string(),
             max_tokens: self.config.max_tokens,
@@ -257,22 +259,25 @@ impl BedrockClient {
             top_p: self.config.top_p,
         }
     }
-    
+
     // Parse a response from Claude into an MCP response
     fn parse_claude_response(&self, response: &ClaudeResponse) -> Result<LlmResponse> {
-        let content = response.content.iter()
+        let content = response
+            .content
+            .iter()
             .filter(|c| c.content_type == "text")
             .map(|c| c.text.clone())
             .collect::<Vec<String>>()
             .join("\n");
-        
+
         // Attempt to parse as JSON
         match serde_json::from_str::<serde_json::Value>(&content) {
             Ok(json_value) => {
                 // Try to validate as MCP response
-                if let Ok(mcp_response) = serde_json::from_value::<McpResponse>(json_value.clone()) {
-                    debug!("Received valid MCP response: {:?}", mcp_response);
-                    
+                if let Ok(mcp_response) = serde_json::from_value::<McpResponse>(json_value.clone())
+                {
+                    debug!("Received valid MCP response");
+
                     // Check if it's a tool call
                     if let Some(result) = mcp_response.result {
                         // Regular response
@@ -299,7 +304,7 @@ impl BedrockClient {
                 } else {
                     // Not a valid MCP response
                     warn!("Response is JSON but not valid MCP format: {}", content);
-                    
+
                     // Fallback - treat as regular text
                     Ok(LlmResponse {
                         id: response.id.clone(),
@@ -307,7 +312,7 @@ impl BedrockClient {
                         tool_calls: Vec::new(),
                     })
                 }
-            },
+            }
             Err(_) => {
                 // Not JSON, treat as regular text response
                 debug!("Response is not JSON, treating as regular text");
@@ -319,7 +324,7 @@ impl BedrockClient {
             }
         }
     }
-    
+
     // Extract tool calls from an MCP request
     fn extract_tool_calls(&self, json_value: &serde_json::Value) -> Result<Vec<ClientToolCall>> {
         if let Ok(mcp_request) = serde_json::from_value::<McpRequest>(json_value.clone()) {
@@ -338,7 +343,7 @@ impl BedrockClient {
                 }
             }
         }
-        
+
         Err(anyhow!("Unable to extract tool call from response"))
     }
 }
@@ -352,24 +357,32 @@ impl LlmClient for BedrockClient {
             let mut active_requests = self.active_requests.lock().unwrap();
             active_requests.insert(request_id.clone(), false);
         }
-        
+
         // Prepare the Claude-specific payload
         let claude_payload = self.prepare_claude_payload(context);
         let payload_bytes = serde_json::to_vec(&claude_payload)?;
-        
+
         debug!("Sending request to Bedrock: {}", self.config.model_id);
-        debug!("Request payload: {}", String::from_utf8_lossy(&payload_bytes));
-        
+        debug!(
+            "Request payload: {}",
+            String::from_utf8_lossy(&payload_bytes)
+        );
+
         // Log detailed request JSON at TRACE level (only shown with LOG_LEVEL=trace)
-        trace!("Raw JSON request payload to Bedrock: {}", 
-               serde_json::to_string_pretty(&claude_payload).unwrap_or_default());
-        
+        trace!(
+            "Raw JSON request payload to Bedrock: {}",
+            serde_json::to_string_pretty(&claude_payload).unwrap_or_default()
+        );
+
         // Send the request to Bedrock
-        let output = match self.client.invoke_model()
+        let output = match self
+            .client
+            .invoke_model()
             .body(Blob::new(payload_bytes))
             .model_id(&self.config.model_id)
             .send()
-            .await {
+            .await
+        {
             Ok(response) => response,
             Err(err) => {
                 error!("Bedrock API error: {:?}", err);
@@ -379,15 +392,13 @@ impl LlmClient for BedrockClient {
                 return Err(anyhow!(BedrockError::ApiError(err.to_string())));
             }
         };
-        
+
         // Parse the response
         let response_bytes = output.body;
         let response_str = String::from_utf8(response_bytes.as_ref().to_vec())?;
-        debug!("Received response from Bedrock: {}", response_str);
-        
         // Log full raw response at TRACE level (only shown with LOG_LEVEL=trace)
         trace!("Raw JSON response from Bedrock: {}", response_str);
-        
+
         // Check if request was cancelled
         {
             let active_requests = self.active_requests.lock().unwrap();
@@ -397,31 +408,36 @@ impl LlmClient for BedrockClient {
                 }
             }
         }
-        
+
         // Remove from active requests
         {
             let mut active_requests = self.active_requests.lock().unwrap();
             active_requests.remove(&request_id);
         }
-        
+
         // Parse the Claude response
         match serde_json::from_str::<ClaudeResponse>(&response_str) {
             Ok(claude_response) => {
-                debug!("Successfully parsed Claude response: {:?}", claude_response.id);
-                
+                debug!(
+                    "Successfully parsed Claude response: {:?}",
+                    claude_response.id
+                );
+
                 // Log structured parsed response at TRACE level
-                trace!("Parsed Claude response structure: {}", 
-                      serde_json::to_string_pretty(&claude_response).unwrap_or_default());
-                
+                trace!(
+                    "Parsed Claude response structure: {}",
+                    serde_json::to_string_pretty(&claude_response).unwrap_or_default()
+                );
+
                 self.parse_claude_response(&claude_response)
-            },
+            }
             Err(err) => {
-                error!("Failed to parse Claude response: {}", err);
-                error!("Response string: {}", response_str);
-                
+                warn!("Failed to parse Claude response: {}", err);
+                warn!("Response string: {}", response_str);
+
                 // Try alternative parsing strategies
                 debug!("Attempting to extract content from non-standard response");
-                
+
                 // Try to parse as JSON even if it's not the expected structure
                 if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_str) {
                     // See if there's a content field that contains text
@@ -435,7 +451,7 @@ impl LlmClient for BedrockClient {
                             });
                         }
                     }
-                    
+
                     // Return the raw JSON as content as a last resort
                     debug!("Returning raw JSON as content");
                     return Ok(LlmResponse {
@@ -444,15 +460,15 @@ impl LlmClient for BedrockClient {
                         tool_calls: Vec::new(),
                     });
                 }
-                
+
                 Err(anyhow!(BedrockError::ResponseParseError(err.to_string())))
             }
         }
     }
-    
+
     async fn stream_message(
-        &self, 
-        context: &ConversationContext
+        &self,
+        context: &ConversationContext,
     ) -> Result<Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>> {
         // Generate a request ID and register it for possible cancellation
         let request_id = Uuid::new_v4().to_string();
@@ -460,27 +476,35 @@ impl LlmClient for BedrockClient {
             let mut active_requests = self.active_requests.lock().unwrap();
             active_requests.insert(request_id.clone(), false);
         }
-        
+
         // Prepare the Claude-specific payload
         let claude_payload = self.prepare_claude_payload(context);
         let payload_bytes = serde_json::to_vec(&claude_payload)?;
-        
-        debug!("Sending streaming request to Bedrock: {}", self.config.model_id);
-        debug!("Request payload: {}", String::from_utf8_lossy(&payload_bytes));
-        
+
+        debug!(
+            "Sending streaming request to Bedrock: {}",
+            self.config.model_id
+        );
+        debug!(
+            "Request payload: {}",
+            String::from_utf8_lossy(&payload_bytes)
+        );
+
         // Log detailed request JSON at TRACE level (only shown with LOG_LEVEL=trace)
-        trace!("Raw streaming JSON request payload to Bedrock: {}", 
-              serde_json::to_string_pretty(&claude_payload).unwrap_or_default());
-        
+        trace!(
+            "Raw streaming JSON request payload to Bedrock: {}",
+            serde_json::to_string_pretty(&claude_payload).unwrap_or_default()
+        );
+
         // Create a channel for the stream
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<StreamChunk>>(100);
-        
+
         // Clone needed data for the async task
         let client = self.client.clone();
         let model_id = self.config.model_id.clone();
         let active_requests = self.active_requests.clone();
         let request_id_clone = request_id.clone();
-        
+
         // We need to ensure we don't use self in the async block
         // Extract what we need from the response to avoid borrowing issues
         let extract_tool_calls = |json_value: &serde_json::Value| -> Option<ClientToolCall> {
@@ -502,25 +526,29 @@ impl LlmClient for BedrockClient {
             }
             None
         };
-        
+
         // Spawn a task to run the request and process the response
         tokio::spawn(async move {
             debug!("We're not using streaming for now, using regular invoke_model");
             debug!("In AWS SDK 1.x, the streaming APIs are difficult to work with");
-            
+
             // Send a regular request instead of streaming
-            let output = match client.invoke_model()
+            let output = match client
+                .invoke_model()
                 .body(Blob::new(payload_bytes))
                 .model_id(&model_id)
                 .send()
-                .await {
+                .await
+            {
                 Ok(response) => response,
                 Err(err) => {
                     error!("Bedrock API error: {:?}", err);
-                    
+
                     // Send error through the channel first
-                    let _ = tx.send(Err(anyhow!(BedrockError::ApiError(err.to_string())))).await;
-                    
+                    let _ = tx
+                        .send(Err(anyhow!(BedrockError::ApiError(err.to_string()))))
+                        .await;
+
                     // Remove from active requests
                     {
                         let mut active_requests = active_requests.lock().unwrap();
@@ -529,17 +557,15 @@ impl LlmClient for BedrockClient {
                     return;
                 }
             };
-            
+
             debug!("Received response from Bedrock");
-            
+
             // Get response body
             let response_bytes = output.body;
             let response_str = String::from_utf8_lossy(response_bytes.as_ref()).to_string();
-            debug!("Response: {}", response_str);
-            
             // Log full raw response at TRACE level (only shown with LOG_LEVEL=trace)
             trace!("Raw JSON streaming response from Bedrock: {}", response_str);
-            
+
             // Check if request was cancelled
             {
                 let active_requests = active_requests.lock().unwrap();
@@ -550,23 +576,30 @@ impl LlmClient for BedrockClient {
                     }
                 }
             }
-            
+
             // Parse the Claude response
             match serde_json::from_str::<ClaudeResponse>(&response_str) {
                 Ok(claude_response) => {
-                    debug!("Successfully parsed Claude response: {:?}", claude_response.id);
-                    
+                    debug!(
+                        "Successfully parsed Claude response: {:?}",
+                        claude_response.id
+                    );
+
                     // Log structured parsed response at TRACE level
-                    trace!("Parsed Claude streaming response structure: {}", 
-                           serde_json::to_string_pretty(&claude_response).unwrap_or_default());
-                    
+                    trace!(
+                        "Parsed Claude streaming response structure: {}",
+                        serde_json::to_string_pretty(&claude_response).unwrap_or_default()
+                    );
+
                     // Get the text content from Claude
-                    let content = claude_response.content.iter()
+                    let content = claude_response
+                        .content
+                        .iter()
                         .filter(|c| c.content_type == "text")
                         .map(|c| c.text.clone())
                         .collect::<Vec<String>>()
                         .join("\n");
-                    
+
                     // Emit the content as a stream
                     let stream_chunk = StreamChunk {
                         id: request_id_clone.clone(),
@@ -575,22 +608,23 @@ impl LlmClient for BedrockClient {
                         tool_call: None,
                         is_complete: false,
                     };
-                    
+
                     if let Err(e) = tx.send(Ok(stream_chunk)).await {
                         error!("Failed to send content chunk to stream: {}", e);
                     }
-                    
+
                     // Try to parse as MCP
                     let is_mcp_response = is_valid_json(&content);
-                    
+
                     if is_mcp_response {
                         debug!("Content appears to be valid JSON, checking for tool calls");
-                        
+
                         // Try to extract tool calls
-                        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&content)
+                        {
                             if let Some(tool_call) = extract_tool_calls(&json_value) {
                                 debug!("Found tool call in response");
-                                
+
                                 // Send a tool call chunk
                                 let final_chunk = StreamChunk {
                                     id: request_id_clone.clone(),
@@ -599,11 +633,11 @@ impl LlmClient for BedrockClient {
                                     tool_call: Some(tool_call),
                                     is_complete: true,
                                 };
-                                
+
                                 if let Err(e) = tx.send(Ok(final_chunk)).await {
                                     error!("Failed to send tool call chunk to stream: {}", e);
                                 }
-                                
+
                                 // Clean up and exit
                                 {
                                     let mut active_requests = active_requests.lock().unwrap();
@@ -613,7 +647,7 @@ impl LlmClient for BedrockClient {
                             }
                         }
                     }
-                    
+
                     // Send completion
                     let final_chunk = StreamChunk {
                         id: request_id_clone.clone(),
@@ -622,14 +656,14 @@ impl LlmClient for BedrockClient {
                         tool_call: None,
                         is_complete: true,
                     };
-                    
+
                     if let Err(e) = tx.send(Ok(final_chunk)).await {
                         error!("Failed to send completion chunk to stream: {}", e);
                     }
-                },
+                }
                 Err(e) => {
                     error!("Failed to parse Claude response: {}", e);
-                    
+
                     // Send the raw content anyway
                     let stream_chunk = StreamChunk {
                         id: request_id_clone.clone(),
@@ -638,24 +672,24 @@ impl LlmClient for BedrockClient {
                         tool_call: None,
                         is_complete: true,
                     };
-                    
+
                     if let Err(send_err) = tx.send(Ok(stream_chunk)).await {
                         error!("Failed to send raw content: {}", send_err);
                     }
                 }
             }
-            
+
             // Remove from active requests
             {
                 let mut active_requests = active_requests.lock().unwrap();
                 active_requests.remove(&request_id_clone);
             }
         });
-        
+
         // Return the receiver as a stream
         Ok(Box::new(ReceiverStream::new(rx)))
     }
-    
+
     fn cancel_request(&self, request_id: &str) -> Result<()> {
         let mut active_requests = self.active_requests.lock().unwrap();
         if let Some(cancelled) = active_requests.get_mut(request_id) {
