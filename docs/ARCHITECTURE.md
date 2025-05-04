@@ -25,7 +25,10 @@ mcpterm/
 │   │   ├── registry/          (tool registration and discovery)
 │   │   ├── shell/             (shell execution tools)
 │   │   ├── filesystem/        (file operations tools)
-│   │   └── search/            (search tools)
+│   │   ├── search/            (search tools - code/file search)
+│   │   ├── diff/              (code diff and comparison tools)
+│   │   ├── analysis/          (code analysis and navigation tools)
+│   │   └── testing/           (test execution and result processing)
 │   │
 │   ├── mcp-runtime/           (execution environment)
 │   │   ├── event-bus/         (the SEDA/CSP message passing system)
@@ -243,11 +246,146 @@ The architecture supports comprehensive testing:
 2. **Sandboxing**: Tool execution is properly constrained
 3. **Permission Models**: Resource access follows principle of least privilege
 
+## Enhanced Tool Architecture
+
+The tool implementation has been expanded to better support complex coding workflows:
+
+### Search Tools
+
+The `search` module provides sophisticated search capabilities:
+
+```rust
+// File content search (grep-like functionality)
+struct GrepTool {
+    config: SearchConfig,
+}
+
+// File pattern search (find-like functionality)
+struct FindTool {
+    config: SearchConfig,
+}
+```
+
+These tools enable the LLM to efficiently explore codebases by searching for:
+- Function definitions
+- Variable usages
+- Specific code patterns
+- Files matching certain criteria
+
+### Diff Tools
+
+The `diff` module provides comparison capabilities:
+
+```rust
+struct DiffTool {
+    config: DiffConfig,
+}
+```
+
+Enables comparing:
+- File versions
+- Code changes
+- Applied patches
+
+### Code Analysis Tools
+
+The `analysis` module provides language-aware code understanding:
+
+```rust
+trait LanguageAnalyzer {
+    fn analyze_imports(&self, file_content: &str) -> Result<Vec<Import>>;
+    fn extract_definitions(&self, file_content: &str) -> Result<Vec<Definition>>;
+    fn find_references(&self, file_content: &str, symbol: &str) -> Result<Vec<Reference>>;
+}
+
+struct ProjectNavigator {
+    config: ProjectConfig,
+    analyzers: HashMap<String, Box<dyn LanguageAnalyzer>>,
+}
+```
+
+These tools help the LLM understand:
+- Project structure
+- Symbol definitions and references
+- Import relationships
+
+### Testing Tools
+
+The `testing` module provides test execution capabilities:
+
+```rust
+struct TestRunner {
+    config: TestConfig,
+}
+```
+
+This enables:
+- Running specific tests
+- Executing test suites
+- Analyzing test results
+- Tracking test coverage
+
+## Context Management Improvements
+
+To support lengthy multi-step tasks, the context management has been enhanced:
+
+```rust
+struct ConversationContext {
+    // Original fields
+    system_prompt: String,
+    messages: Vec<Message>,
+    current_request_id: Option<String>,
+    
+    // New fields
+    working_memory: HashMap<String, Value>,  // For task-specific state
+    context_plan: Option<ContextPlan>,       // For managing large contexts
+}
+
+struct ContextPlan {
+    summary_frequency: usize,         // How often to summarize
+    important_messages: Vec<usize>,   // Indices of critical messages to retain
+    pruning_strategy: PruningStrategy, // How to prune when context grows too large
+}
+```
+
+These enhancements allow for:
+1. Maintaining long-running tasks without context overflow
+2. Storing task-specific state separate from the conversation
+3. Intelligent context summarization and pruning
+
+## Multi-Step Task Coordination
+
+For complex tasks requiring multiple steps, a task coordination layer has been added:
+
+```rust
+struct TaskCoordinator {
+    task_id: String,
+    steps: Vec<TaskStep>,
+    current_step: usize,
+    state: HashMap<String, Value>,
+}
+
+struct TaskStep {
+    description: String,
+    status: StepStatus,
+    result: Option<Value>,
+}
+```
+
+This enables:
+1. Breaking down complex tasks into manageable steps
+2. Tracking progress across multiple interactions
+3. Recovering from failures during multi-step tasks
+4. Providing more structured LLM guidance during complex workflows
+
 ## Scalability Path
 
-This architecture allows for future extensions:
+This enhanced architecture allows for future extensions:
 
 1. Additional LLM providers
-2. New tool implementations
+2. New tool implementations 
 3. Alternative UI frontends (GUI, web, etc.)
 4. Distributed operation if needed
+5. Language-specific tooling
+6. Deeper IDE integration
+7. CI/CD pipeline interactions

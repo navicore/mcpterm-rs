@@ -1,2 +1,6 @@
-// This module will contain search tools for files and content
-// Placeholder for future implementation
+// Search tools for files and content
+pub mod grep;
+pub mod find;
+
+pub use grep::{GrepTool, GrepConfig};
+pub use find::{FindTool, FindConfig};
