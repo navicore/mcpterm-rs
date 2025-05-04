@@ -1,6 +1,6 @@
+use mcp_metrics::count;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use mcp_metrics::count;
 use tracing::{debug, trace};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,11 +58,11 @@ impl ConversationContext {
             tool_calls: None,
             tool_results: None,
         });
-        
+
         // Count message metrics
         count!("conversation.messages.total");
         count!("conversation.messages.user");
-        
+
         debug!("Conversation now has {} messages", self.messages.len());
     }
 
@@ -75,11 +75,11 @@ impl ConversationContext {
             tool_calls: None,
             tool_results: None,
         });
-        
+
         // Count message metrics
         count!("conversation.messages.total");
         count!("conversation.messages.assistant");
-        
+
         debug!("Conversation now has {} messages", self.messages.len());
     }
 
@@ -92,11 +92,11 @@ impl ConversationContext {
             tool_calls: None,
             tool_results: None,
         });
-        
+
         // Count message metrics
         count!("conversation.messages.total");
         count!("conversation.messages.tool");
-        
+
         debug!("Conversation now has {} messages", self.messages.len());
     }
 
@@ -109,11 +109,11 @@ impl ConversationContext {
             tool_calls: None,
             tool_results: None,
         });
-        
+
         // Count message metrics
         count!("conversation.messages.total");
         count!("conversation.messages.system");
-        
+
         debug!("Conversation now has {} messages", self.messages.len());
     }
 
@@ -126,7 +126,7 @@ impl ConversationContext {
             tool_calls: None,
             tool_results: None,
         });
-        
+
         // Count message metrics
         count!("conversation.messages.total");
         match role {
@@ -135,7 +135,7 @@ impl ConversationContext {
             MessageRole::Tool => count!("conversation.messages.tool"),
             MessageRole::System => count!("conversation.messages.system"),
         }
-        
+
         debug!("Conversation now has {} messages", self.messages.len());
     }
 }

@@ -73,7 +73,7 @@ pub fn debug_log(message: &str) {
         // Try to append to the log file, ignore errors
         if let Ok(mut file) = OpenOptions::new().append(true).open(path) {
             let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S.%3f");
-            if let Err(_) = writeln!(file, "[{}] {}", timestamp, message) {
+            if writeln!(file, "[{}] {}", timestamp, message).is_err() {
                 // Try the fallback file if primary fails
                 let _ = write_to_fallback(&format!("[{}] {}", timestamp, message));
             }
