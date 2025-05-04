@@ -22,12 +22,12 @@ impl Default for LanguageAnalyzerTool {
 
 impl LanguageAnalyzerTool {
     pub fn new() -> Self {
-        let mut analyzers: Vec<Arc<dyn LanguageAnalyzer + Send + Sync>> = Vec::new();
-
-        // Register available language analyzers
-        analyzers.push(Arc::new(RustAnalyzer::new()));
-        analyzers.push(Arc::new(JsAnalyzer::new()));
-        analyzers.push(Arc::new(PythonAnalyzer::new()));
+        let analyzers: Vec<Arc<dyn LanguageAnalyzer + Send + Sync>> = vec![
+            // Register available language analyzers
+            Arc::new(RustAnalyzer::new()),
+            Arc::new(JsAnalyzer::new()),
+            Arc::new(PythonAnalyzer::new()),
+        ];
 
         Self { analyzers }
     }
