@@ -3,7 +3,6 @@ use mcp_tools::{Tool, ToolStatus};
 use serde_json::json;
 use std::fs::File;
 use std::io::Write;
-use std::path::PathBuf;
 use tempfile::tempdir;
 
 #[tokio::test]
@@ -229,25 +228,25 @@ async fn test_diff_tool_changes_format() {
     let has_deleted_line2 = diff_lines.iter().any(|line| {
         let line_type = line["change_type"].as_str();
         let content = line["content"].as_str();
-        line_type == Some("delete") && content.map_or(false, |c| c.trim() == "line 2")
+        line_type == Some("delete") && content.is_some_and(|c| c.trim() == "line 2")
     });
 
     let has_deleted_line4 = diff_lines.iter().any(|line| {
         let line_type = line["change_type"].as_str();
         let content = line["content"].as_str();
-        line_type == Some("delete") && content.map_or(false, |c| c.trim() == "line 4")
+        line_type == Some("delete") && content.is_some_and(|c| c.trim() == "line 4")
     });
 
     let has_added_modified = diff_lines.iter().any(|line| {
         let line_type = line["change_type"].as_str();
         let content = line["content"].as_str();
-        line_type == Some("insert") && content.map_or(false, |c| c.trim() == "modified line")
+        line_type == Some("insert") && content.is_some_and(|c| c.trim() == "modified line")
     });
 
     let has_added_line = diff_lines.iter().any(|line| {
         let line_type = line["change_type"].as_str();
         let content = line["content"].as_str();
-        line_type == Some("insert") && content.map_or(false, |c| c.trim() == "added line")
+        line_type == Some("insert") && content.is_some_and(|c| c.trim() == "added line")
     });
 
     assert!(has_deleted_line2);

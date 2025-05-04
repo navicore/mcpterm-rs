@@ -49,6 +49,7 @@ impl Default for PatchConfig {
 
 /// Represents a hunk in a unified diff
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct DiffHunk {
     /// Starting line in the original file
     old_start: usize,
@@ -80,7 +81,7 @@ struct PatchResult {
 }
 
 /// The PatchTool for applying patches to files
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct PatchTool {
     config: PatchConfig,
 }

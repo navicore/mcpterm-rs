@@ -143,7 +143,7 @@ impl Default for ProjectConfig {
 }
 
 /// ProjectNavigator tool for analyzing project structure
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct ProjectNavigator {
     config: ProjectConfig,
 }
@@ -264,10 +264,10 @@ impl ProjectNavigator {
                     }
                 } else if path.is_dir() {
                     let file_name = path.file_name().unwrap_or_default().to_string_lossy();
-                    if !self.config.skip_dirs.iter().any(|d| d == &file_name) {
-                        if self.has_file_with_extension(&path, extensions) {
-                            return true;
-                        }
+                    if !self.config.skip_dirs.iter().any(|d| d == &file_name)
+                        && self.has_file_with_extension(&path, extensions)
+                    {
+                        return true;
                     }
                 }
             }
@@ -340,30 +340,21 @@ impl ProjectNavigator {
                         let version_part = trimmed[eq_pos + 1..].trim();
 
                         // Handle basic version formats: "0.1.0" or { version = "0.1.0", features = [...] }
-                        let version =
-                            if version_part.starts_with('"') && version_part.ends_with('"') {
-                                // Simple string version
-                                Some(version_part.trim_matches('"').to_string())
-                            } else if version_part.starts_with('{') {
-                                // Complex dependency spec
-                                if let Some(ver_start) = version_part.find("version") {
-                                    if let Some(ver_eq) = version_part[ver_start..].find('=') {
-                                        let ver_str = &version_part[ver_start + ver_eq + 1..];
-                                        if let Some(quote_start) = ver_str.find('"') {
-                                            if let Some(quote_end) =
-                                                ver_str[quote_start + 1..].find('"')
-                                            {
-                                                Some(
-                                                    ver_str[quote_start + 1
-                                                        ..quote_start + 1 + quote_end]
-                                                        .to_string(),
-                                                )
-                                            } else {
-                                                None
-                                            }
-                                        } else {
-                                            None
-                                        }
+                        let version = if version_part.starts_with('"')
+                            && version_part.ends_with('"')
+                        {
+                            // Simple string version
+                            Some(version_part.trim_matches('"').to_string())
+                        } else if version_part.starts_with('{') {
+                            // Complex dependency spec
+                            if let Some(ver_start) = version_part.find("version") {
+                                if let Some(ver_eq) = version_part[ver_start..].find('=') {
+                                    let ver_str = &version_part[ver_start + ver_eq + 1..];
+                                    if let Some(quote_start) = ver_str.find('"') {
+                                        ver_str[quote_start + 1..].find('"').map(|quote_end| {
+                                            ver_str[quote_start + 1..quote_start + 1 + quote_end]
+                                                .to_string()
+                                        })
                                     } else {
                                         None
                                     }
@@ -372,7 +363,10 @@ impl ProjectNavigator {
                                 }
                             } else {
                                 None
-                            };
+                            }
+                        } else {
+                            None
+                        };
 
                         dependencies.push(Dependency {
                             name,
@@ -522,7 +516,7 @@ impl ProjectNavigator {
         let main_path = project_dir.join("src/main.rs");
         if main_path.exists() {
             entry_points.push(EntryPoint {
-                path: format!("src/main.rs"),
+                path: "src/main.rs".to_string(),
                 entry_type: "main".to_string(),
                 description: "Main executable entry point".to_string(),
             });
@@ -532,7 +526,7 @@ impl ProjectNavigator {
         let lib_path = project_dir.join("src/lib.rs");
         if lib_path.exists() {
             entry_points.push(EntryPoint {
-                path: format!("src/lib.rs"),
+                path: "src/lib.rs".to_string(),
                 entry_type: "library".to_string(),
                 description: "Library crate entry point".to_string(),
             });
@@ -544,7 +538,17 @@ impl ProjectNavigator {
             if let Ok(entries) = fs::read_dir(&bin_path) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if path.is_file() && path.extension().map_or(false, |ext| ext == "rs") {
+                    if path.is_file() && {
+                        let this = path.extension();
+                        if let Some(t) = this {
+                            fn fun_name(ext: &std::ffi::OsStr) -> bool {
+                                ext == "rs"
+                            }
+                            (fun_name)(t)
+                        } else {
+                            false
+                        }
+                    } {
                         let relative_path =
                             format!("src/bin/{}", path.file_name().unwrap().to_string_lossy());
 
@@ -567,7 +571,7 @@ impl ProjectNavigator {
             if let Ok(entries) = fs::read_dir(&examples_path) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if path.is_file() && path.extension().map_or(false, |ext| ext == "rs") {
+                    if path.is_file() && path.extension().map_or_else(|| false, |ext| ext == "rs") {
                         let relative_path =
                             format!("examples/{}", path.file_name().unwrap().to_string_lossy());
 
@@ -659,12 +663,11 @@ impl ProjectNavigator {
 
         // Look for __main__.py files
         if let Ok(entries) = walk_dir(project_dir, self.config.max_depth) {
-            for entry in entries {
+            entries.into_iter().for_each(|entry| {
                 if let Ok(entry) = entry {
                     let path = entry.path();
 
-                    if path.is_file()
-                        && path.file_name().map_or(false, |name| name == "__main__.py")
+                    if path.is_file() && path.file_name().is_some_and(|name| name == "__main__.py")
                     {
                         // Get relative path
                         if let Ok(relative) = path.strip_prefix(project_dir) {
@@ -681,7 +684,7 @@ impl ProjectNavigator {
                         }
                     }
                 }
-            }
+            });
         }
 
         // Look for app.py, main.py, run.py in root or src
@@ -1001,7 +1004,7 @@ impl ProjectNavigator {
                     if file_name.contains("test") || file_name.contains("spec") {
                         return Some("test-source".to_string());
                     }
-                    return Some("source".to_string());
+                    Some("source".to_string())
                 }
 
                 // Documentation files

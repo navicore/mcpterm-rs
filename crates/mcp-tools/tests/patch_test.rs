@@ -49,7 +49,7 @@ async fn test_patch_tool_basic() {
 
     // Verify the result
     assert_eq!(result.status, ToolStatus::Success);
-    assert_eq!(result.output["success"].as_bool().unwrap(), true);
+    assert!(result.output["success"].as_bool().unwrap());
     assert_eq!(result.output["hunks_applied"].as_i64().unwrap(), 1);
     assert_eq!(result.output["hunks_failed"].as_i64().unwrap(), 0);
 
@@ -106,7 +106,7 @@ async fn test_patch_tool_dry_run() {
 
     // Verify the result
     assert_eq!(result.status, ToolStatus::Success);
-    assert_eq!(result.output["success"].as_bool().unwrap(), true);
+    assert!(result.output["success"].as_bool().unwrap());
     assert_eq!(result.output["hunks_applied"].as_i64().unwrap(), 1);
 
     // Verify the file was NOT modified (dry run)
@@ -154,7 +154,7 @@ async fn test_patch_tool_conflict() {
 
     // Verify the conflict is detected
     assert_eq!(result.status, ToolStatus::Failure);
-    assert_eq!(result.output["success"].as_bool().unwrap(), false);
+    assert!(!result.output["success"].as_bool().unwrap());
     assert_eq!(result.output["hunks_applied"].as_i64().unwrap(), 0);
     assert_eq!(result.output["hunks_failed"].as_i64().unwrap(), 1);
 
@@ -206,7 +206,7 @@ async fn test_patch_tool_multiple_hunks() {
 
     // Verify both hunks were applied
     assert_eq!(result.status, ToolStatus::Success);
-    assert_eq!(result.output["success"].as_bool().unwrap(), true);
+    assert!(result.output["success"].as_bool().unwrap());
     assert_eq!(result.output["hunks_applied"].as_i64().unwrap(), 2);
 
     // Verify the file content
@@ -269,7 +269,7 @@ async fn test_patch_tool_partial_success() {
 
     // Verify partial success
     assert_eq!(result.status, ToolStatus::Failure);
-    assert_eq!(result.output["success"].as_bool().unwrap(), false);
+    assert!(!result.output["success"].as_bool().unwrap());
     assert_eq!(result.output["hunks_applied"].as_i64().unwrap(), 1);
     assert_eq!(result.output["hunks_failed"].as_i64().unwrap(), 1);
 

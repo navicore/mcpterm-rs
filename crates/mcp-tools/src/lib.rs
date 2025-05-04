@@ -130,11 +130,11 @@ impl ToolManager {
                             if !description.is_empty() {
                                 doc.push_str(&format!(",           // {}", description));
                             }
-                            doc.push_str("\n");
+                            doc.push('\n');
                         } else {
                             doc.push_str(&format!("     \"{}\": \"{}\"", param_name, param_type));
                             doc.push_str(&format!(",           // Optional: {}", description));
-                            doc.push_str("\n");
+                            doc.push('\n');
                         }
                     }
                 }

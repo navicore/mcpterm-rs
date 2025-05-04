@@ -3,15 +3,17 @@ use mcp_tools::{
     search::{GrepConfig, GrepTool},
     Tool, ToolStatus,
 };
-use serde_json::{json, Value};
-use std::env;
-use std::fs::{self, File};
+use serde_json::json;
 use std::io::Write;
 use std::path::PathBuf;
+use std::{
+    fs::{self, File},
+    path::Path,
+};
 use tempfile::tempdir;
 
 // Helper to create a temporary test file with content
-fn create_test_file(dir: &PathBuf, filename: &str, content: &str) -> Result<PathBuf> {
+fn create_test_file(dir: &Path, filename: &str, content: &str) -> Result<PathBuf> {
     let file_path = dir.join(filename);
     let mut file = File::create(&file_path)?;
     writeln!(file, "{}", content)?;

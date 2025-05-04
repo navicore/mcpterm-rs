@@ -3,17 +3,17 @@ use mcp_tools::{
     search::{FindConfig, FindTool},
     Tool, ToolStatus,
 };
-use serde_json::{json, Value};
-use std::env;
-use std::fs::{self, File};
+use serde_json::json;
 use std::io::Write;
 use std::path::PathBuf;
-use std::thread;
-use std::time::Duration;
+use std::{
+    fs::{self, File},
+    path::Path,
+};
 use tempfile::tempdir;
 
 // Helper to create a temporary test file with content
-fn create_test_file(dir: &PathBuf, filename: &str, content: &str) -> Result<PathBuf> {
+fn create_test_file(dir: &Path, filename: &str, content: &str) -> Result<PathBuf> {
     let file_path = dir.join(filename);
     let mut file = File::create(&file_path)?;
     writeln!(file, "{}", content)?;
@@ -212,9 +212,9 @@ async fn test_find_tool_sorting() -> Result<()> {
     let test_dir = PathBuf::from(temp_dir.path());
 
     // Create files of different sizes
-    let small_file = create_test_file(&test_dir, "small.txt", "Small")?;
-    let medium_file = create_test_file(&test_dir, "medium.txt", "Medium content that is longer")?;
-    let large_file = create_test_file(
+    let _small_file = create_test_file(&test_dir, "small.txt", "Small")?;
+    let _medium_file = create_test_file(&test_dir, "medium.txt", "Medium content that is longer")?;
+    let _large_file = create_test_file(
         &test_dir,
         "large.txt",
         "Large content that is even longer than the medium content",
