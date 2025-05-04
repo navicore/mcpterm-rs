@@ -10,16 +10,20 @@ use mcp_tools::{
     ToolManager, ToolResult, ToolStatus,
 };
 use serde_json::Value;
-use std::io::Write;
+use std::io::Write as IoWrite;
+use std::fmt::Write as FmtWrite;
 use std::sync::Arc;
 use tracing::{debug, error, info, trace, warn};
+
+use crate::formatter::ResponseFormatter;
 
 // ========== Helper structs ==========
 
 // Represents a tool execution result including the result or error
 struct FormattedToolResult {
-    status_str: String,
+    // The JSON-RPC formatted result string for adding to context
     formatted_result: String,
+    // The original tool result for display formatting
     original_result: ToolResult,
 }
 
@@ -29,8 +33,9 @@ struct FollowUpResponse {
     is_empty_or_tool_call: bool,
 }
 
-// Export our mock implementation for tests
+// Export our modules
 pub mod mock;
+pub mod formatter;
 
 pub struct CliApp {
     context: ConversationContext,
@@ -750,12 +755,9 @@ impl CliApp {
                 // Process successful tool execution
                 let formatted = self.format_tool_result(result);
 
-                // Display the result to the user
-                println!("\n[Tool Result: {}]", formatted.status_str);
-                println!("Output: {}", formatted.original_result.output);
-                if let Some(err) = &formatted.original_result.error {
-                    println!("Error: {}", err);
-                }
+                // Display the result to the user using our prettier formatter
+                let human_friendly_output = ResponseFormatter::format_tool_result(&formatted.original_result);
+                println!("{}", human_friendly_output);
 
                 // Add the tool result to the context
                 debug!(
@@ -777,8 +779,16 @@ impl CliApp {
             Err(e) => {
                 // Handle tool execution error
                 error!("Error executing tool: {}", e);
-                println!("\n[Tool Execution Error]");
-                println!("Failed to execute tool '{}': {}", tool_name, e);
+                
+                // Create a formatted error output
+                let mut output = String::new();
+                writeln!(&mut output, "┌─────────────────────────────────┐").unwrap();
+                writeln!(&mut output, "│ Tool Execution Error            │").unwrap();
+                writeln!(&mut output, "└─────────────────────────────────┘").unwrap();
+                writeln!(&mut output, "\nTool: {}", tool_name).unwrap();
+                writeln!(&mut output, "Error: {}", e).unwrap();
+                
+                println!("{}", output);
 
                 // Format as a standard MCP error response using JSON-RPC 2.0
                 let error_result = format!(
@@ -794,13 +804,6 @@ impl CliApp {
     }
 
     fn format_tool_result(&self, result: ToolResult) -> FormattedToolResult {
-        // Get status string
-        let status_str = match result.status {
-            ToolStatus::Success => "SUCCESS",
-            ToolStatus::Failure => "FAILURE",
-            ToolStatus::Timeout => "TIMEOUT",
-        };
-
         // Format the result as JSON-RPC 2.0
         let output_json = serde_json::to_string(&result.output)
             .unwrap_or_else(|_| "\"Failed to serialize result\"".to_string());
@@ -812,7 +815,6 @@ impl CliApp {
         );
 
         FormattedToolResult {
-            status_str: status_str.to_string(),
             formatted_result,
             original_result: result,
         }
@@ -839,7 +841,12 @@ impl CliApp {
     }
 
     fn create_fallback_message(&self, tool_result_output: &str) -> String {
-        // Parse the tool result to extract meaningful information
+        // Try to use our fancy formatter to parse the JSON-RPC result
+        if let Some(formatted_output) = ResponseFormatter::extract_from_jsonrpc(tool_result_output) {
+            return formatted_output;
+        }
+        
+        // Fallback to basic formatting if our fancy formatter fails
         let parsed_result: Result<serde_json::Value, _> = serde_json::from_str(tool_result_output);
 
         match parsed_result {
