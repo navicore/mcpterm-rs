@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use mcp_resources::{ResourceManager, AccessMode};
-    
+    use mcp_resources::{AccessMode, ResourceManager};
+
     #[test]
     fn test_register_file() {
         let manager = ResourceManager::new("/tmp");
