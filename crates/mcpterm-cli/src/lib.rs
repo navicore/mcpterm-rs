@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use mcp_core::context::{ConversationContext, MessageRole};
 use mcp_core::{api_log, debug_log};
-use mcp_llm::{BedrockClient, BedrockConfig, LlmClient};
+use mcp_llm::{BedrockClient, BedrockConfig, LlmClient, StreamChunk};
 use mcp_metrics::{count, gauge, time};
 use mcp_tools::{
     filesystem::{FilesystemConfig, ListDirectoryTool, ReadFileTool, WriteFileTool},
@@ -12,7 +12,22 @@ use mcp_tools::{
 use serde_json::Value;
 use std::io::Write;
 use std::sync::Arc;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
+
+// ========== Helper structs ==========
+
+// Represents a tool execution result including the result or error
+struct FormattedToolResult {
+    status_str: String,
+    formatted_result: String,
+    original_result: ToolResult,
+}
+
+// Represents a follow-up response after tool execution
+struct FollowUpResponse {
+    content: String,
+    is_empty_or_tool_call: bool,
+}
 
 // Export our mock implementation for tests
 pub mod mock;
@@ -256,6 +271,8 @@ impl CliApp {
         Ok(())
     }
 
+    // ========== Main run method ==========
+
     pub async fn run(&mut self, prompt: &str) -> Result<String> {
         // Make sure the client is initialized
         if self.llm_client.is_none() {
@@ -263,7 +280,7 @@ impl CliApp {
             self.initialize().await?;
         }
 
-        let client = self.llm_client.as_ref().unwrap();
+        //let _client = self.llm_client.as_ref().unwrap();
 
         // Add the user message to the conversation context
         debug_log(&format!("Adding user message: {}", prompt));
@@ -275,634 +292,578 @@ impl CliApp {
 
         // Use streaming or regular response based on config
         if self.config.streaming {
-            debug_log("Using streaming response");
-            // Process a streaming response
-            let mut response_content = String::new();
-
-            // Record the time taken for the streaming response
-            time!("llm.streaming_response_time", {
-                debug_log("Sending streaming request to Bedrock");
-                let stream_result = client.stream_message(&self.context).await;
-
-                match stream_result {
-                    Ok(mut stream) => {
-                        debug_log("Stream response received, processing chunks");
-                        // Process the stream chunks
-                        println!("Response: ");
-
-                        // Track if we've received any content at all
-                        let mut received_content = false;
-
-                        while let Some(chunk_result) = stream.next().await {
-                            match chunk_result {
-                                Ok(chunk) => {
-                                    debug_log(&format!(
-                                        "Received chunk, {} bytes",
-                                        chunk.content.len()
-                                    ));
-                                    api_log(&format!("Chunk content: {}", chunk.content));
-
-                                    if !chunk.content.is_empty() {
-                                        received_content = true;
-
-                                        // Print the chunk content and add to total content
-                                        print!("{}", chunk.content);
-                                        let _ = std::io::stdout().flush();
-
-                                        response_content.push_str(&chunk.content);
-
-                                        // Record metrics
-                                        count!("llm.stream_chunks", 1);
-                                    }
-
-                                    // If this is a tool call, handle it
-                                    if chunk.is_tool_call {
-                                        debug!("Tool call received: {:?}", chunk.tool_call);
-                                        count!("llm.tool_calls", 1);
-
-                                        if let Some(tool_call) = &chunk.tool_call {
-                                            // Extract tool name and parameters
-                                            let tool_name = &tool_call.tool;
-                                            let params = &tool_call.params;
-
-                                            info!("Processing tool call: {}", tool_name);
-
-                                            // Execute the tool (store the result so we don't have borrow issues)
-                                            let tool_result =
-                                                self.execute_tool(tool_name, params.clone()).await;
-
-                                            match tool_result {
-                                                Ok(result) => {
-                                                    // Format the result for display
-                                                    let status_str = match result.status {
-                                                        ToolStatus::Success => "SUCCESS",
-                                                        ToolStatus::Failure => "FAILURE",
-                                                        ToolStatus::Timeout => "TIMEOUT",
-                                                    };
-
-                                                    // Display the result to the user
-                                                    println!("\n[Tool Result: {}]", status_str);
-                                                    println!("Output: {}", result.output);
-                                                    if let Some(err) = &result.error {
-                                                        println!("Error: {}", err);
-                                                    }
-
-                                                    // Add the tool result to the context
-                                                    // Format using the JSON-RPC 2.0 response format for MCP
-                                                    let output_json =
-                                                        serde_json::to_string(&result.output)
-                                                            .unwrap_or_else(|_| {
-                                                                "\"Failed to serialize result\""
-                                                                    .to_string()
-                                                            });
-
-                                                    // Format as a standard MCP tool response using JSON-RPC 2.0
-                                                    let formatted_result = format!(
-                                                        "{{\"jsonrpc\": \"2.0\", \"result\": {}, \"id\": \"tool_result\"}}",
-                                                        output_json
-                                                    );
-
-                                                    debug!(
-                                                        "Adding tool result to context: {}",
-                                                        formatted_result
-                                                    );
-                                                    // Log tool result at trace level for detailed debugging
-                                                    trace!("Tool execution result full JSON-RPC response: {}",
-                                                           serde_json::to_string_pretty(&result).unwrap_or_default());
-
-                                                    // Add the tool result to the conversation context
-                                                    self.context
-                                                        .add_tool_message(&formatted_result);
-
-                                                    // We'll handle follow-up in the is_complete section
-                                                }
-                                                Err(e) => {
-                                                    error!("Error executing tool: {}", e);
-                                                    println!("\n[Tool Execution Error]");
-                                                    println!(
-                                                        "Failed to execute tool '{}': {}",
-                                                        tool_name, e
-                                                    );
-
-                                                    // Format as a standard MCP error response using JSON-RPC 2.0
-                                                    let error_result = format!(
-                                                        "{{\"jsonrpc\": \"2.0\", \"error\": {{\"code\": -32000, \"message\": \"Failed to execute tool: {}\"}}, \"id\": \"tool_result\"}}",
-                                                        e
-                                                    );
-                                                    debug!(
-                                                        "Adding tool error to context: {}",
-                                                        error_result
-                                                    );
-                                                    self.context.add_tool_message(&error_result);
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // If this is the final chunk, we're done
-                                    if chunk.is_complete {
-                                        debug!("Final chunk received");
-                                        println!(); // Add a newline after completion
-
-                                        // Check if we had a tool call and need a follow-up
-                                        if chunk.is_tool_call {
-                                            // Get a follow-up response with the tool results
-                                            debug!(
-                                                "Getting follow-up response with tool results..."
-                                            );
-
-                                            // Get a fresh reference to the client since the original might be invalidated
-                                            let follow_up_client =
-                                                self.llm_client.as_ref().unwrap();
-                                            let follow_up_result = follow_up_client
-                                                .stream_message(&self.context)
-                                                .await;
-
-                                            match follow_up_result {
-                                                Ok(mut follow_up_stream) => {
-                                                    println!("Response: ");
-                                                    let mut follow_up_content = String::new();
-
-                                                    while let Some(follow_up_chunk_result) =
-                                                        follow_up_stream.next().await
-                                                    {
-                                                        match follow_up_chunk_result {
-                                                            Ok(follow_up_chunk) => {
-                                                                if !follow_up_chunk
-                                                                    .content
-                                                                    .is_empty()
-                                                                {
-                                                                    print!(
-                                                                        "{}",
-                                                                        follow_up_chunk.content
-                                                                    );
-                                                                    let _ =
-                                                                        std::io::stdout().flush();
-                                                                    follow_up_content.push_str(
-                                                                        &follow_up_chunk.content,
-                                                                    );
-                                                                }
-
-                                                                if follow_up_chunk.is_complete {
-                                                                    debug!("Follow-up response complete, breaking from stream loop");
-                                                                    break;
-                                                                }
-                                                            }
-                                                            Err(e) => {
-                                                                error!(
-                                                                    "Error in follow-up stream: {}",
-                                                                    e
-                                                                );
-                                                                break;
-                                                            }
-                                                        }
-                                                    }
-
-                                                    // Check if the follow-up content is empty or contains another tool call
-                                                    if follow_up_content.trim().is_empty()
-                                                        || follow_up_content
-                                                            .contains("mcp.tool_call")
-                                                    {
-                                                        debug!("FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying...");
-
-                                                        // Extract the tool result for the fallback message
-                                                        let tool_result_output =
-                                                            match self.context.messages.last() {
-                                                                Some(message)
-                                                                    if matches!(
-                                                                        message.role,
-                                                                        MessageRole::Tool
-                                                                    ) =>
-                                                                {
-                                                                    message.content.clone()
-                                                                }
-                                                                _ => "\"Tool result not found\""
-                                                                    .to_string(),
-                                                            };
-
-                                                        // Add an explicit message to help Claude understand what happened
-                                                        // Using a more detailed prompt to get an actual answer, not another tool call
-                                                        let instruction = format!(
-                                                            "I've executed the requested tool and received the following result: {}. \
-                                                            Now I need to provide a direct human-readable answer based on this result. \
-                                                            The tool has already been executed successfully. \
-                                                            I will not make another tool call. \
-                                                            Instead, I'll synthesize a concise answer for the user based on the tool result above.",
-                                                            tool_result_output
-                                                        );
-
-                                                        self.context
-                                                            .add_assistant_message(&instruction);
-
-                                                        // Try one more time with an explicit request for a response
-                                                        debug!("Getting follow-up response with explicit instruction...");
-
-                                                        // Sleep a bit before retry
-                                                        tokio::time::sleep(
-                                                            tokio::time::Duration::from_secs(1),
-                                                        )
-                                                        .await;
-
-                                                        let retry_client =
-                                                            self.llm_client.as_ref().unwrap();
-                                                        let retry_result = retry_client
-                                                            .stream_message(&self.context)
-                                                            .await;
-
-                                                        match retry_result {
-                                                            Ok(mut retry_stream) => {
-                                                                println!("Response: "); // Changed from "Retry Response:" to just "Response:"
-                                                                let mut retry_content =
-                                                                    String::new();
-
-                                                                while let Some(retry_chunk_result) =
-                                                                    retry_stream.next().await
-                                                                {
-                                                                    if let Ok(retry_chunk) =
-                                                                        retry_chunk_result
-                                                                    {
-                                                                        if !retry_chunk
-                                                                            .content
-                                                                            .is_empty()
-                                                                        {
-                                                                            print!(
-                                                                                "{}",
-                                                                                retry_chunk.content
-                                                                            );
-                                                                            let _ =
-                                                                                std::io::stdout()
-                                                                                    .flush();
-                                                                            retry_content.push_str(
-                                                                                &retry_chunk
-                                                                                    .content,
-                                                                            );
-                                                                        }
-
-                                                                        if retry_chunk.is_complete {
-                                                                            println!();
-                                                                            break;
-                                                                        }
-                                                                    }
-                                                                }
-
-                                                                // Use the retry content if it's not empty and not another tool call
-                                                                if !retry_content.trim().is_empty()
-                                                                    && !retry_content
-                                                                        .contains("mcp.tool_call")
-                                                                {
-                                                                    debug!("RETRY FOLLOW-UP RESPONSE RECEIVED: {}", retry_content);
-                                                                    self.context
-                                                                        .add_assistant_message(
-                                                                            &retry_content,
-                                                                        );
-                                                                    response_content =
-                                                                        retry_content;
-                                                                } else {
-                                                                    debug!("RETRY STILL PROBLEMATIC! Using fallback response.");
-
-                                                                    // Parse the tool result to extract meaningful information for the fallback
-                                                                    let parsed_result: Result<
-                                                                        serde_json::Value,
-                                                                        _,
-                                                                    > = serde_json::from_str(
-                                                                        &tool_result_output,
-                                                                    );
-                                                                    let fallback_message = match parsed_result {
-                                                                        Ok(json) => {
-                                                                            if let Some(result) = json.get("result") {
-                                                                                if let Some(stdout) = result.get("stdout") {
-                                                                                    if let Some(stdout_str) = stdout.as_str() {
-                                                                                        format!("Command executed successfully. Result: {}", stdout_str.trim())
-                                                                                    } else {
-                                                                                        "Command executed successfully.".to_string()
-                                                                                    }
-                                                                                } else {
-                                                                                    format!("Command executed. Result: {}", result)
-                                                                                }
-                                                                            } else if let Some(err) = json.get("error") {
-                                                                                format!("Command execution error: {}", err)
-                                                                            } else {
-                                                                                format!("Tool executed with result: {}", json)
-                                                                            }
-                                                                        },
-                                                                        Err(_) => "Tool executed successfully.".to_string()
-                                                                    };
-
-                                                                    println!(
-                                                                        "Response: {}",
-                                                                        fallback_message
-                                                                    );
-                                                                    self.context
-                                                                        .add_assistant_message(
-                                                                            &fallback_message,
-                                                                        );
-                                                                    response_content =
-                                                                        fallback_message;
-                                                                }
-                                                            }
-                                                            Err(e) => {
-                                                                error!("Error in retry follow-up stream: {}", e);
-                                                                // Create a fallback response
-                                                                let fallback_message = "The command was executed, but there was an error getting a detailed response.";
-                                                                println!(
-                                                                    "Response: {}",
-                                                                    fallback_message
-                                                                );
-                                                                self.context.add_assistant_message(
-                                                                    fallback_message,
-                                                                );
-                                                                response_content =
-                                                                    fallback_message.to_string();
-                                                            }
-                                                        }
-                                                    } else {
-                                                        // We have a non-empty follow-up response that's not a tool call, use it
-                                                        self.context.add_assistant_message(
-                                                            &follow_up_content,
-                                                        );
-                                                        debug!("Received valid follow-up response after tool execution: length={} chars", follow_up_content.len());
-                                                        response_content = follow_up_content;
-                                                    }
-
-                                                    // Sleep for a longer time to ensure all outputs are properly processed
-                                                    tokio::time::sleep(
-                                                        tokio::time::Duration::from_secs(1),
-                                                    )
-                                                    .await;
-                                                }
-                                                Err(e) => {
-                                                    error!(
-                                                        "Failed to get follow-up response: {}",
-                                                        e
-                                                    );
-                                                }
-                                            }
-                                        }
-
-                                        break;
-                                    }
-                                }
-                                Err(e) => {
-                                    debug_log(&format!("Error in stream: {}", e));
-                                    count!("llm.errors", 1);
-                                    eprintln!("Error receiving response: {}", e);
-                                    return Err(anyhow!("Error in stream: {}", e));
-                                }
-                            }
-                        }
-
-                        // If we haven't received any content, that's an error
-                        if !received_content {
-                            debug_log("No content received from stream");
-                            return Err(anyhow!("No content received from Bedrock. Please check your AWS credentials and model availability."));
-                        }
-                    }
-                    Err(e) => {
-                        debug_log(&format!("Failed to start streaming: {}", e));
-                        count!("llm.errors", 1);
-                        return Err(anyhow!("Failed to start streaming: {}", e));
-                    }
-                }
-            });
-
-            // Add the full response to the conversation
-            self.context.add_assistant_message(&response_content);
-
-            // Return the complete response
-            Ok(response_content)
+            self.handle_streaming_response().await
         } else {
-            debug_log("Using standard (non-streaming) response");
-            // Process a regular response
-            // Record the time taken for the regular response
-            let response = time!("llm.response_time", {
-                debug_log("Sending request to Bedrock");
-                match client.send_message(&self.context).await {
-                    Ok(resp) => {
-                        debug_log("Response received from Bedrock");
-                        api_log(&format!("Response content: {}", resp.content));
-                        resp
-                    }
-                    Err(e) => {
-                        debug_log(&format!("Error from Bedrock: {}", e));
-                        count!("llm.errors", 1);
+            self.handle_non_streaming_response().await
+        }
+    }
 
-                        // Print a user-friendly error message
-                        eprintln!("Error communicating with Bedrock: {}", e);
-                        eprintln!("Please check your AWS credentials and model availability.");
+    // ========== Streaming response handling ==========
 
-                        return Err(anyhow!("Error from Bedrock: {}", e));
-                    }
+    async fn handle_streaming_response(&mut self) -> Result<String> {
+        debug_log("Using streaming response");
+        let response_content;
+        let client = self.llm_client.as_ref().unwrap();
+
+        // Record the time taken for the streaming response
+        time!("llm.streaming_response_time", {
+            debug_log("Sending streaming request to Bedrock");
+            let stream_result = client.stream_message(&self.context).await;
+
+            match stream_result {
+                Ok(mut stream) => {
+                    response_content = self.process_streaming_response(&mut stream).await?;
                 }
-            });
-
-            // Add the response to the conversation
-            debug_log("Adding assistant message to conversation");
-            self.context.add_assistant_message(&response.content);
-
-            // Handle tool calls if any
-            if !response.tool_calls.is_empty() {
-                debug!("Found {} tool calls", response.tool_calls.len());
-                count!("llm.tool_calls", response.tool_calls.len() as u64);
-
-                // Store all the tool calls
-                let tool_calls = response.tool_calls.clone();
-
-                // Process each tool call
-                for tool_call in &tool_calls {
-                    debug!("Tool call: {}", tool_call.tool);
-                    let metric_name = &format!("llm.tool_calls.{}", tool_call.tool);
-                    count!(metric_name, 1);
-
-                    // Process the tool call
-                    let tool_name = &tool_call.tool;
-                    let params = &tool_call.params;
-
-                    debug!("Processing tool call: {}", tool_name);
-
-                    // Execute the tool
-                    let tool_result = self.execute_tool(tool_name, params.clone()).await;
-
-                    match tool_result {
-                        Ok(result) => {
-                            // Format the result for display
-                            let status_str = match result.status {
-                                ToolStatus::Success => "SUCCESS",
-                                ToolStatus::Failure => "FAILURE",
-                                ToolStatus::Timeout => "TIMEOUT",
-                            };
-
-                            // Display the result to the user
-                            println!("\n[Tool Result: {}]", status_str);
-                            println!("Output: {}", result.output);
-                            if let Some(err) = &result.error {
-                                println!("Error: {}", err);
-                            }
-
-                            // Add the tool result to the context
-                            // Format using the JSON-RPC 2.0 response format for MCP
-                            let output_json = serde_json::to_string(&result.output)
-                                .unwrap_or_else(|_| "\"Failed to serialize result\"".to_string());
-
-                            // Format as a standard MCP tool response using JSON-RPC 2.0
-                            let formatted_result = format!(
-                                "{{\"jsonrpc\": \"2.0\", \"result\": {}, \"id\": \"tool_result\"}}",
-                                output_json
-                            );
-
-                            debug!("Adding tool result to context: {}", formatted_result);
-                            // Log tool result at trace level for detailed debugging
-                            trace!(
-                                "Tool execution result full JSON-RPC response (non-streaming): {}",
-                                serde_json::to_string_pretty(&result).unwrap_or_default()
-                            );
-
-                            // Add the tool result to the conversation context
-                            self.context.add_tool_message(&formatted_result);
-
-                            // Continue the conversation with the tool result
-                            debug!("Tool execution complete, will get follow-up response");
-                        }
-                        Err(e) => {
-                            error!("Error executing tool: {}", e);
-                            println!("\n[Tool Execution Error]");
-                            println!("Failed to execute tool '{}': {}", tool_name, e);
-
-                            // Format as a standard MCP error response using JSON-RPC 2.0
-                            let error_result = format!(
-                                "{{\"jsonrpc\": \"2.0\", \"error\": {{\"code\": -32000, \"message\": \"Failed to execute tool: {}\"}}, \"id\": \"tool_result\"}}",
-                                e
-                            );
-                            debug!("Adding tool error to context: {}", error_result);
-                            self.context.add_tool_message(&error_result);
-                        }
-                    }
-                }
-
-                // Get a new response with the tool results
-                debug!("Getting follow-up response with tool results...");
-                // At this point, the client variable from earlier is no longer being used
-                // Get a fresh reference to the LLM client
-                let client = self.llm_client.as_ref().unwrap();
-                let follow_up_response = client.send_message(&self.context).await?;
-
-                // Check if the follow-up content is empty or contains another tool call
-                if follow_up_response.content.trim().is_empty()
-                    || follow_up_response.content.contains("mcp.tool_call")
-                {
-                    debug!(
-                        "FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying..."
-                    );
-
-                    // Extract the tool result for the fallback message
-                    let tool_result_output = match self.context.messages.last() {
-                        Some(message) if matches!(message.role, MessageRole::Tool) => {
-                            message.content.clone()
-                        }
-                        _ => "\"Tool result not found\"".to_string(),
-                    };
-
-                    // Add an explicit message to help Claude understand what happened
-                    // Using a more detailed prompt to get an actual answer, not another tool call
-                    let instruction = format!(
-                        "I've executed the requested tool and received the following result: {}. \
-                        Now I need to provide a direct human-readable answer based on this result. \
-                        The tool has already been executed successfully. \
-                        I will not make another tool call. \
-                        Instead, I'll synthesize a concise answer for the user based on the tool result above.",
-                        tool_result_output
-                    );
-
-                    self.context.add_assistant_message(&instruction);
-
-                    // Try one more time with an explicit request for a response
-                    debug!("Getting follow-up response with explicit instruction...");
-
-                    // Sleep a bit before retry
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-                    let retry_client = self.llm_client.as_ref().unwrap();
-                    let retry_response = retry_client.send_message(&self.context).await?;
-
-                    // Use the retry content if it's not empty and not another tool call
-                    if !retry_response.content.trim().is_empty()
-                        && !retry_response.content.contains("mcp.tool_call")
-                    {
-                        debug!(
-                            "RETRY FOLLOW-UP RESPONSE RECEIVED: {}",
-                            retry_response.content
-                        );
-
-                        self.context.add_assistant_message(&retry_response.content);
-
-                        // Print and return the retry response
-                        println!("Response: {}", retry_response.content);
-                        debug!("Tool call flow completed successfully with retry");
-                        return Ok(retry_response.content);
-                    } else {
-                        debug!("RETRY STILL PROBLEMATIC! Using fallback response.");
-
-                        // Parse the tool result to extract meaningful information for the fallback
-                        let parsed_result: Result<serde_json::Value, _> =
-                            serde_json::from_str(&tool_result_output);
-                        let fallback_message = match parsed_result {
-                            Ok(json) => {
-                                if let Some(result) = json.get("result") {
-                                    if let Some(stdout) = result.get("stdout") {
-                                        if let Some(stdout_str) = stdout.as_str() {
-                                            format!(
-                                                "Command executed successfully. Result: {}",
-                                                stdout_str.trim()
-                                            )
-                                        } else {
-                                            "Command executed successfully.".to_string()
-                                        }
-                                    } else {
-                                        format!("Command executed. Result: {}", result)
-                                    }
-                                } else if let Some(err) = json.get("error") {
-                                    format!("Command execution error: {}", err)
-                                } else {
-                                    format!("Tool executed with result: {}", json)
-                                }
-                            }
-                            Err(_) => "Tool executed successfully.".to_string(),
-                        };
-
-                        self.context.add_assistant_message(&fallback_message);
-
-                        // Print and return the fallback message
-                        println!("Response: {}", fallback_message);
-                        debug!("Tool call flow completed with intelligent fallback message");
-                        return Ok(fallback_message);
-                    }
-                } else {
-                    // We have a non-empty follow-up response that's not a tool call, use it
-                    self.context
-                        .add_assistant_message(&follow_up_response.content);
-
-                    // Log to debug but don't print to stdout
-                    debug!("Received valid follow-up response after tool execution: length={} chars, content: {}",
-                           follow_up_response.content.len(), follow_up_response.content);
-
-                    debug!(
-                        "Received follow-up response after tool execution: length={} chars",
-                        follow_up_response.content.len()
-                    );
-
-                    // Sleep for a longer time to ensure all outputs are properly processed
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-                    // Print and return the follow-up response
-                    println!("Response: {}", follow_up_response.content);
-                    debug!("Tool call flow completed successfully");
-                    return Ok(follow_up_response.content);
+                Err(e) => {
+                    debug_log(&format!("Failed to start streaming: {}", e));
+                    count!("llm.errors", 1);
+                    return Err(anyhow!("Failed to start streaming: {}", e));
                 }
             }
+        });
 
-            // Print and return the response
-            println!("Response: {}", response.content);
-            debug_log("Request completed successfully");
-            Ok(response.content)
+        // Add the full response to the conversation
+        self.context.add_assistant_message(&response_content);
+
+        // Return the complete response
+        Ok(response_content)
+    }
+
+    async fn process_streaming_response(
+        &mut self,
+        stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
+    ) -> Result<String> {
+        debug_log("Stream response received, processing chunks");
+        println!("Response: ");
+
+        // Track if we've received any content at all
+        let mut received_content = false;
+        let mut response_content = String::new();
+        let mut had_tool_call = false;
+
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(chunk) => {
+                    debug_log(&format!("Received chunk, {} bytes", chunk.content.len()));
+                    api_log(&format!("Chunk content: {}", chunk.content));
+
+                    if !chunk.content.is_empty() {
+                        received_content = true;
+                        self.print_chunk_content(&chunk.content);
+                        response_content.push_str(&chunk.content);
+                        count!("llm.stream_chunks", 1);
+                    }
+
+                    // Handle tool call if present
+                    if chunk.is_tool_call {
+                        had_tool_call = true;
+                        if let Some(tool_call) = &chunk.tool_call {
+                            self.handle_tool_call(tool_call).await?;
+                        }
+                    }
+
+                    // If this is the final chunk, we're done
+                    if chunk.is_complete {
+                        debug!("Final chunk received");
+                        println!(); // Add a newline after completion
+
+                        // Check if we had a tool call and need a follow-up
+                        if had_tool_call {
+                            // Get a follow-up response with the tool results
+                            let follow_up_result = self.get_streaming_follow_up_response().await?;
+                            return Ok(follow_up_result);
+                        }
+
+                        break;
+                    }
+                }
+                Err(e) => {
+                    debug_log(&format!("Error in stream: {}", e));
+                    count!("llm.errors", 1);
+                    eprintln!("Error receiving response: {}", e);
+                    return Err(anyhow!("Error in stream: {}", e));
+                }
+            }
+        }
+
+        // If we haven't received any content, that's an error
+        if !received_content {
+            debug_log("No content received from stream");
+            return Err(anyhow!("No content received from Bedrock. Please check your AWS credentials and model availability."));
+        }
+
+        Ok(response_content)
+    }
+
+    fn print_chunk_content(&self, content: &str) {
+        print!("{}", content);
+        let _ = std::io::stdout().flush();
+    }
+
+    async fn get_streaming_follow_up_response(&mut self) -> Result<String> {
+        debug!("Getting follow-up response with tool results...");
+
+        // Get a fresh reference to the client
+        let follow_up_client = self.llm_client.as_ref().unwrap();
+        let follow_up_result = follow_up_client.stream_message(&self.context).await;
+
+        match follow_up_result {
+            Ok(mut follow_up_stream) => {
+                let follow_up = self
+                    .collect_streaming_follow_up(&mut follow_up_stream)
+                    .await?;
+
+                // Check if the follow-up content is empty or contains another tool call
+                if follow_up.is_empty_or_tool_call {
+                    self.handle_problematic_streaming_follow_up().await
+                } else {
+                    // We have a valid follow-up response
+                    self.context.add_assistant_message(&follow_up.content);
+                    debug!(
+                        "Received valid follow-up response after tool execution: length={} chars",
+                        follow_up.content.len()
+                    );
+
+                    // Sleep to ensure all outputs are processed
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+                    Ok(follow_up.content)
+                }
+            }
+            Err(e) => {
+                error!("Failed to get follow-up response: {}", e);
+
+                // Create a fallback response
+                let fallback_message =
+                    "The command was executed, but there was an error getting a detailed response.";
+                self.context.add_assistant_message(fallback_message);
+                Ok(fallback_message.to_string())
+            }
+        }
+    }
+
+    async fn collect_streaming_follow_up(
+        &self,
+        follow_up_stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
+    ) -> Result<FollowUpResponse> {
+        println!("Response: ");
+        let mut follow_up_content = String::new();
+
+        while let Some(follow_up_chunk_result) = follow_up_stream.next().await {
+            match follow_up_chunk_result {
+                Ok(follow_up_chunk) => {
+                    if !follow_up_chunk.content.is_empty() {
+                        print!("{}", follow_up_chunk.content);
+                        let _ = std::io::stdout().flush();
+                        follow_up_content.push_str(&follow_up_chunk.content);
+                    }
+
+                    if follow_up_chunk.is_complete {
+                        debug!("Follow-up response complete");
+                        println!();
+                        break;
+                    }
+                }
+                Err(e) => {
+                    error!("Error in follow-up stream: {}", e);
+                    break;
+                }
+            }
+        }
+
+        // Check if the follow-up is empty or contains a tool call
+        let is_empty_or_tool_call =
+            follow_up_content.trim().is_empty() || follow_up_content.contains("mcp.tool_call");
+
+        Ok(FollowUpResponse {
+            content: follow_up_content,
+            is_empty_or_tool_call,
+        })
+    }
+
+    async fn handle_problematic_streaming_follow_up(&mut self) -> Result<String> {
+        debug!("FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying...");
+
+        // Extract the tool result for the fallback message
+        let tool_result_output = self.extract_last_tool_result();
+
+        // Add explicit instruction to help Claude understand
+        let instruction = self.create_tool_result_instruction(&tool_result_output);
+        self.context.add_assistant_message(&instruction);
+
+        // Try one more time with an explicit request for a response
+        debug!("Getting follow-up response with explicit instruction...");
+
+        // Sleep a bit before retry
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        let retry_client = self.llm_client.as_ref().unwrap();
+        let retry_result = retry_client.stream_message(&self.context).await;
+
+        match retry_result {
+            Ok(mut retry_stream) => {
+                let retry_response = self.collect_streaming_retry(&mut retry_stream).await?;
+
+                // Check if the retry was successful
+                if !retry_response.is_empty() && !retry_response.contains("mcp.tool_call") {
+                    debug!("RETRY FOLLOW-UP RESPONSE RECEIVED: {}", retry_response);
+                    self.context.add_assistant_message(&retry_response);
+                    Ok(retry_response)
+                } else {
+                    // Retry still problematic, use fallback
+                    debug!("RETRY STILL PROBLEMATIC! Using fallback response.");
+                    let fallback_message = self.create_fallback_message(&tool_result_output);
+
+                    println!("Response: {}", fallback_message);
+                    self.context.add_assistant_message(&fallback_message);
+                    Ok(fallback_message)
+                }
+            }
+            Err(e) => {
+                error!("Error in retry follow-up stream: {}", e);
+                // Create a fallback response
+                let fallback_message =
+                    "The command was executed, but there was an error getting a detailed response.";
+                println!("Response: {}", fallback_message);
+                self.context.add_assistant_message(fallback_message);
+                Ok(fallback_message.to_string())
+            }
+        }
+    }
+
+    async fn collect_streaming_retry(
+        &self,
+        retry_stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
+    ) -> Result<String> {
+        println!("Response: ");
+        let mut retry_content = String::new();
+
+        while let Some(retry_chunk_result) = retry_stream.next().await {
+            if let Ok(retry_chunk) = retry_chunk_result {
+                if !retry_chunk.content.is_empty() {
+                    print!("{}", retry_chunk.content);
+                    let _ = std::io::stdout().flush();
+                    retry_content.push_str(&retry_chunk.content);
+                }
+
+                if retry_chunk.is_complete {
+                    println!();
+                    break;
+                }
+            }
+        }
+
+        Ok(retry_content)
+    }
+
+    // ========== Non-streaming response handling ==========
+
+    async fn handle_non_streaming_response(&mut self) -> Result<String> {
+        debug_log("Using standard (non-streaming) response");
+        let client = self.llm_client.as_ref().unwrap();
+
+        // Record the time taken for the regular response
+        let response = time!("llm.response_time", {
+            debug_log("Sending request to Bedrock");
+            match client.send_message(&self.context).await {
+                Ok(resp) => {
+                    debug_log("Response received from Bedrock");
+                    api_log(&format!("Response content: {}", resp.content));
+                    resp
+                }
+                Err(e) => {
+                    debug_log(&format!("Error from Bedrock: {}", e));
+                    count!("llm.errors", 1);
+
+                    // Print a user-friendly error message
+                    eprintln!("Error communicating with Bedrock: {}", e);
+                    eprintln!("Please check your AWS credentials and model availability.");
+
+                    return Err(anyhow!("Error from Bedrock: {}", e));
+                }
+            }
+        });
+
+        // Add the response to the conversation
+        debug_log("Adding assistant message to conversation");
+        self.context.add_assistant_message(&response.content);
+
+        // Handle tool calls if any
+        if !response.tool_calls.is_empty() {
+            // Process and handle tool calls
+            self.handle_non_streaming_tool_calls(&response.tool_calls)
+                .await?;
+
+            // Get a follow-up response after tool execution
+            return self.get_non_streaming_follow_up().await;
+        }
+
+        // No tool calls, just return the response
+        println!("Response: {}", response.content);
+        debug_log("Request completed successfully");
+        Ok(response.content)
+    }
+
+    async fn handle_non_streaming_tool_calls(
+        &mut self,
+        tool_calls: &[mcp_llm::ToolCall],
+    ) -> Result<()> {
+        debug!("Found {} tool calls", tool_calls.len());
+        count!("llm.tool_calls", tool_calls.len() as u64);
+
+        // Process each tool call
+        for tool_call in tool_calls {
+            debug!("Tool call: {}", tool_call.tool);
+            let metric_name = &format!("llm.tool_calls.{}", tool_call.tool);
+            count!(metric_name, 1);
+
+            // Process the tool call
+            let tool_name = &tool_call.tool;
+            let params = &tool_call.params;
+
+            debug!("Processing tool call: {}", tool_name);
+
+            // Execute the tool
+            self.handle_tool_call_execution(tool_name, params.clone())
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn get_non_streaming_follow_up(&mut self) -> Result<String> {
+        debug!("Getting follow-up response with tool results...");
+
+        // Get a fresh reference to the LLM client
+        let client = self.llm_client.as_ref().unwrap();
+        let follow_up_response = client.send_message(&self.context).await?;
+
+        // Check if the follow-up content is empty or contains another tool call
+        if follow_up_response.content.trim().is_empty()
+            || follow_up_response.content.contains("mcp.tool_call")
+        {
+            debug!("FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying...");
+
+            // Handle problematic follow-up response
+            self.handle_problematic_non_streaming_follow_up().await
+        } else {
+            // We have a valid non-empty follow-up response
+            self.handle_successful_non_streaming_follow_up(&follow_up_response.content)
+                .await
+        }
+    }
+
+    async fn handle_problematic_non_streaming_follow_up(&mut self) -> Result<String> {
+        // Extract the tool result for the fallback message
+        let tool_result_output = self.extract_last_tool_result();
+
+        // Add explicit instruction to help Claude understand
+        let instruction = self.create_tool_result_instruction(&tool_result_output);
+        self.context.add_assistant_message(&instruction);
+
+        // Try one more time with an explicit request for a response
+        debug!("Getting follow-up response with explicit instruction...");
+
+        // Sleep a bit before retry
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        let retry_client = self.llm_client.as_ref().unwrap();
+        let retry_response = retry_client.send_message(&self.context).await?;
+
+        // Check if the retry was successful
+        if !retry_response.content.trim().is_empty()
+            && !retry_response.content.contains("mcp.tool_call")
+        {
+            debug!(
+                "RETRY FOLLOW-UP RESPONSE RECEIVED: {}",
+                retry_response.content
+            );
+
+            self.context.add_assistant_message(&retry_response.content);
+
+            // Print and return the retry response
+            println!("Response: {}", retry_response.content);
+            debug!("Tool call flow completed successfully with retry");
+            Ok(retry_response.content)
+        } else {
+            warn!("Retry still problematic. Using fallback response.");
+
+            // Create a fallback response based on the tool result
+            let fallback_message = self.create_fallback_message(&tool_result_output);
+
+            self.context.add_assistant_message(&fallback_message);
+
+            // Print and return the fallback message
+            println!("Response: {}", fallback_message);
+            debug!("Tool call flow completed with intelligent fallback message");
+            Ok(fallback_message)
+        }
+    }
+
+    async fn handle_successful_non_streaming_follow_up(&mut self, content: &str) -> Result<String> {
+        // Add the valid follow-up response to the context
+        self.context.add_assistant_message(content);
+
+        // Log the response details
+        debug!(
+            "Received valid follow-up response after tool execution: length={} chars, content: {}",
+            content.len(),
+            content
+        );
+        debug!(
+            "Received follow-up response after tool execution: length={} chars",
+            content.len()
+        );
+
+        // Sleep for a longer time to ensure all outputs are properly processed
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        // Print and return the follow-up response
+        println!("Response: {}", content);
+        debug!("Tool call flow completed successfully");
+        Ok(content.to_string())
+    }
+
+    // ========== Tool execution helpers ==========
+
+    async fn handle_tool_call(&mut self, tool_call: &mcp_llm::ToolCall) -> Result<()> {
+        debug!("Tool call received: {:?}", tool_call);
+        count!("llm.tool_calls", 1);
+
+        // Extract tool name and parameters
+        let tool_name = &tool_call.tool;
+        let params = &tool_call.params;
+
+        info!("Processing tool call: {}", tool_name);
+
+        // Execute the tool
+        self.handle_tool_call_execution(tool_name, params.clone())
+            .await
+    }
+
+    async fn handle_tool_call_execution(&mut self, tool_name: &str, params: Value) -> Result<()> {
+        // Execute the tool
+        let tool_result = self.execute_tool(tool_name, params).await;
+
+        match tool_result {
+            Ok(result) => {
+                // Process successful tool execution
+                let formatted = self.format_tool_result(result);
+
+                // Display the result to the user
+                println!("\n[Tool Result: {}]", formatted.status_str);
+                println!("Output: {}", formatted.original_result.output);
+                if let Some(err) = &formatted.original_result.error {
+                    println!("Error: {}", err);
+                }
+
+                // Add the tool result to the context
+                debug!(
+                    "Adding tool result to context: {}",
+                    formatted.formatted_result
+                );
+
+                // Log tool result at trace level for detailed debugging
+                trace!(
+                    "Tool execution result full JSON-RPC response: {}",
+                    serde_json::to_string_pretty(&formatted.original_result).unwrap_or_default()
+                );
+
+                // Add the tool result to the conversation context
+                self.context.add_tool_message(&formatted.formatted_result);
+
+                Ok(())
+            }
+            Err(e) => {
+                // Handle tool execution error
+                error!("Error executing tool: {}", e);
+                println!("\n[Tool Execution Error]");
+                println!("Failed to execute tool '{}': {}", tool_name, e);
+
+                // Format as a standard MCP error response using JSON-RPC 2.0
+                let error_result = format!(
+                    "{{\"jsonrpc\": \"2.0\", \"error\": {{\"code\": -32000, \"message\": \"Failed to execute tool: {}\"}}, \"id\": \"tool_result\"}}",
+                    e
+                );
+                debug!("Adding tool error to context: {}", error_result);
+                self.context.add_tool_message(&error_result);
+
+                Ok(())
+            }
+        }
+    }
+
+    fn format_tool_result(&self, result: ToolResult) -> FormattedToolResult {
+        // Get status string
+        let status_str = match result.status {
+            ToolStatus::Success => "SUCCESS",
+            ToolStatus::Failure => "FAILURE",
+            ToolStatus::Timeout => "TIMEOUT",
+        };
+
+        // Format the result as JSON-RPC 2.0
+        let output_json = serde_json::to_string(&result.output)
+            .unwrap_or_else(|_| "\"Failed to serialize result\"".to_string());
+
+        // Format as a standard MCP tool response
+        let formatted_result = format!(
+            "{{\"jsonrpc\": \"2.0\", \"result\": {}, \"id\": \"tool_result\"}}",
+            output_json
+        );
+
+        FormattedToolResult {
+            status_str: status_str.to_string(),
+            formatted_result,
+            original_result: result,
+        }
+    }
+
+    // ========== Utility functions ==========
+
+    fn extract_last_tool_result(&self) -> String {
+        match self.context.messages.last() {
+            Some(message) if matches!(message.role, MessageRole::Tool) => message.content.clone(),
+            _ => "\"Tool result not found\"".to_string(),
+        }
+    }
+
+    fn create_tool_result_instruction(&self, tool_result: &str) -> String {
+        format!(
+            "I've executed the requested tool and received the following result: {}. \
+            Now I need to provide a direct human-readable answer based on this result. \
+            The tool has already been executed successfully. \
+            I will not make another tool call. \
+            Instead, I'll synthesize a concise answer for the user based on the tool result above.",
+            tool_result
+        )
+    }
+
+    fn create_fallback_message(&self, tool_result_output: &str) -> String {
+        // Parse the tool result to extract meaningful information
+        let parsed_result: Result<serde_json::Value, _> = serde_json::from_str(tool_result_output);
+
+        match parsed_result {
+            Ok(json) => {
+                if let Some(result) = json.get("result") {
+                    if let Some(stdout) = result.get("stdout") {
+                        if let Some(stdout_str) = stdout.as_str() {
+                            format!(
+                                "Command executed successfully. Result: {}",
+                                stdout_str.trim()
+                            )
+                        } else {
+                            "Command executed successfully.".to_string()
+                        }
+                    } else {
+                        format!("Command executed. Result: {}", result)
+                    }
+                } else if let Some(err) = json.get("error") {
+                    format!("Command execution error: {}", err)
+                } else {
+                    format!("Tool executed with result: {}", json)
+                }
+            }
+            Err(_) => "Tool executed successfully.".to_string(),
         }
     }
 }
