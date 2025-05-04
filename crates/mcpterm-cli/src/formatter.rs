@@ -711,8 +711,10 @@ impl ResponseFormatter {
 ///    This formatter handles all cases
 pub fn format_llm_response(content: &str) -> String {
     // First, check if this is a tool call JSON-RPC - if so, skip it entirely
-    if content.contains("\"jsonrpc\"") && content.contains("\"method\"") && 
-       (content.contains("\"mcp.tool_call\"") || content.contains("\"params\"")) {
+    if content.contains("\"jsonrpc\"")
+        && content.contains("\"method\"")
+        && (content.contains("\"mcp.tool_call\"") || content.contains("\"params\""))
+    {
         debug!("Detected tool call JSON-RPC, skipping format: {}", content);
         return String::new(); // Return empty string to avoid printing the tool call
     }
@@ -726,22 +728,26 @@ pub fn format_llm_response(content: &str) -> String {
                 if !content_array.is_empty() {
                     if let Some(text) = content_array[0].get("text").and_then(|v| v.as_str()) {
                         // Skip if this is a tool call
-                        if text.contains("\"jsonrpc\"") && text.contains("\"method\"") && 
-                           (text.contains("\"mcp.tool_call\"") || text.contains("\"params\"")) {
+                        if text.contains("\"jsonrpc\"")
+                            && text.contains("\"method\"")
+                            && (text.contains("\"mcp.tool_call\"") || text.contains("\"params\""))
+                        {
                             debug!("Detected tool call in content text, skipping format");
                             return String::new();
                         }
-                        
+
                         // This is the Claude Bedrock API format - the text field contains a JSON-RPC response
                         if text.trim().starts_with('{') && text.trim().ends_with('}') {
                             if let Ok(inner_json) = serde_json::from_str::<serde_json::Value>(text)
                             {
                                 // Skip if this is a tool call
                                 if inner_json.get("method").is_some() {
-                                    debug!("Detected method field in inner JSON, likely a tool call");
+                                    debug!(
+                                        "Detected method field in inner JSON, likely a tool call"
+                                    );
                                     return String::new();
                                 }
-                                
+
                                 // If it's a JSON-RPC response, extract the result field
                                 if inner_json.get("jsonrpc").is_some() {
                                     if let Some(result) = inner_json.get("result") {
@@ -762,12 +768,14 @@ pub fn format_llm_response(content: &str) -> String {
             // Format: {"content":"text or JSON string",...}
             if let Some(text) = parsed.get("content").and_then(|v| v.as_str()) {
                 // Skip if this is a tool call
-                if text.contains("\"jsonrpc\"") && text.contains("\"method\"") && 
-                   (text.contains("\"mcp.tool_call\"") || text.contains("\"params\"")) {
+                if text.contains("\"jsonrpc\"")
+                    && text.contains("\"method\"")
+                    && (text.contains("\"mcp.tool_call\"") || text.contains("\"params\""))
+                {
                     debug!("Detected tool call in content field, skipping format");
                     return String::new();
                 }
-                
+
                 // Check if this content is actually JSON itself (common in LLM responses)
                 if text.trim().starts_with('{') && text.trim().ends_with('}') {
                     if let Ok(nested_json) = serde_json::from_str::<serde_json::Value>(text) {
@@ -776,7 +784,7 @@ pub fn format_llm_response(content: &str) -> String {
                             debug!("Detected method field in nested JSON, likely a tool call");
                             return String::new();
                         }
-                        
+
                         // If it's a JSON-RPC response, extract the result field
                         if nested_json.get("jsonrpc").is_some() {
                             if let Some(result) = nested_json.get("result") {

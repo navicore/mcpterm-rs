@@ -181,7 +181,8 @@ impl McpSchemaManager {
 
     /// Get the system prompt addition that instructs the LLM to use MCP with custom tool documentation
     pub fn get_mcp_system_prompt_with_tools(&self, tools_doc: &str) -> String {
-        format!(r#"
+        format!(
+            r#"
 You are an AI assistant that follows the Model Context Protocol (MCP).
 You MUST communicate using valid JSON in the JSON-RPC 2.0 format.
 
@@ -227,9 +228,11 @@ If you require more information or the result of a tool call, make a tool call r
 
 When working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code
 before making changes or executing commands.
-"#, tools_doc)
+"#,
+            tools_doc
+        )
     }
-    
+
     /// Get the system prompt addition that instructs the LLM to use MCP
     pub fn get_mcp_system_prompt(&self) -> &str {
         r#"

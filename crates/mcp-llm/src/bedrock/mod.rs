@@ -219,7 +219,7 @@ impl BedrockClient {
             tools_documentation: None,
         })
     }
-    
+
     /// Create a new client with custom tool documentation
     pub async fn with_tool_documentation(config: BedrockConfig, tools_doc: String) -> Result<Self> {
         // Configure AWS SDK
@@ -277,11 +277,13 @@ impl BedrockClient {
         if let Some(custom_prompt) = &self.config.system_prompt {
             system_prompt = format!("{}\n\n{}", system_prompt, custom_prompt);
         }
-        
+
         // Add MCP system prompt - use dynamic tool documentation if available
         if let Some(tools_doc) = &self.tools_documentation {
             // Use the custom tool documentation with MCP system prompt
-            let mcp_prompt = self.schema_manager.get_mcp_system_prompt_with_tools(tools_doc);
+            let mcp_prompt = self
+                .schema_manager
+                .get_mcp_system_prompt_with_tools(tools_doc);
             system_prompt = format!("{}\n\n{}", system_prompt, mcp_prompt);
         } else {
             // Use the standard MCP system prompt
@@ -547,7 +549,7 @@ impl LlmClient for BedrockClient {
             // Remove request from tracking
             let mut active_requests = self.active_requests.lock().unwrap();
             active_requests.remove(&request_id);
-            
+
             // We're in test mode, return a mock response that parseClaudeResponse can handle
             aws_sdk_bedrockruntime::operation::invoke_model::InvokeModelOutput::builder()
                 .content_type("application/json")
@@ -737,7 +739,7 @@ impl LlmClient for BedrockClient {
             let output = if is_test_mode {
                 // This is a test-only path, create a mock response
                 debug!("Using mock streaming response for tests");
-                
+
                 // We're in test mode, return a mock response
                 aws_sdk_bedrockruntime::operation::invoke_model::InvokeModelOutput::builder()
                     .content_type("application/json")
@@ -746,7 +748,8 @@ impl LlmClient for BedrockClient {
                     .expect("Failed to build mock streaming response")
             } else {
                 // This is the normal operation path
-                match client.unwrap()
+                match client
+                    .unwrap()
                     .invoke_model()
                     .body(Blob::new(payload_bytes))
                     .model_id(&model_id)
@@ -756,12 +759,12 @@ impl LlmClient for BedrockClient {
                     Ok(response) => response,
                     Err(err) => {
                         error!("Bedrock API error: {:?}", err);
-    
+
                         // Send error through the channel first
                         let _ = tx
                             .send(Err(anyhow!(BedrockError::ApiError(err.to_string()))))
                             .await;
-    
+
                         // Remove from active requests
                         {
                             let mut active_requests = active_requests.lock().unwrap();
@@ -925,17 +928,17 @@ fn is_valid_json(s: &str) -> bool {
 mod tests {
     use super::*;
     use mcp_core::context::{ConversationContext, Message, MessageRole};
-    
+
     // Test the dynamic tool documentation generation
     #[test]
     fn test_dynamic_tool_documentation() {
         let config = BedrockConfig::claude();
         let tools_doc = "1. \"test_tool\": This is a test tool\n   Parameters: {\n     \"param1\": \"string\",           // Required parameter\n     \"param2\": \"number\",           // Optional: Another parameter\n   }\n";
-        
+
         // Create a mock BedrockRuntimeClient for testing
         // In tests, we don't need a real client
         let mock_client = None; // Using None to indicate this is a test-only client
-        
+
         let client = BedrockClient {
             client: mock_client,
             config,
@@ -944,38 +947,36 @@ mod tests {
             active_requests: Arc::new(Mutex::new(HashMap::new())),
             tools_documentation: Some(tools_doc.to_string()),
         };
-        
+
         let context = ConversationContext {
             system_prompt: String::new(),
-            messages: vec![
-                Message {
-                    role: MessageRole::User,
-                    content: "Hello".to_string(),
-                    tool_calls: None,
-                    tool_results: None,
-                },
-            ],
+            messages: vec![Message {
+                role: MessageRole::User,
+                content: "Hello".to_string(),
+                tool_calls: None,
+                tool_results: None,
+            }],
             current_request_id: None,
         };
-        
+
         let payload = client.prepare_claude_payload(&context);
-        
+
         // Check that the system prompt contains our tool documentation
         assert!(payload.system.contains("test_tool"));
         assert!(payload.system.contains("This is a test tool"));
         assert!(payload.system.contains("Required parameter"));
         assert!(payload.system.contains("Optional: Another parameter"));
     }
-    
+
     // Test that regular (non-dynamic) tool documentation is used when no custom docs provided
     #[test]
     fn test_default_tool_documentation() {
         let config = BedrockConfig::claude();
-        
+
         // Create a mock BedrockRuntimeClient for testing
         // In tests, we don't need a real client
         let mock_client = None; // Using None to indicate this is a test-only client
-        
+
         let client = BedrockClient {
             client: mock_client,
             config,
@@ -984,22 +985,20 @@ mod tests {
             active_requests: Arc::new(Mutex::new(HashMap::new())),
             tools_documentation: None,
         };
-        
+
         let context = ConversationContext {
             system_prompt: String::new(),
-            messages: vec![
-                Message {
-                    role: MessageRole::User,
-                    content: "Hello".to_string(),
-                    tool_calls: None,
-                    tool_results: None,
-                },
-            ],
+            messages: vec![Message {
+                role: MessageRole::User,
+                content: "Hello".to_string(),
+                tool_calls: None,
+                tool_results: None,
+            }],
             current_request_id: None,
         };
-        
+
         let payload = client.prepare_claude_payload(&context);
-        
+
         // Check that the system prompt contains the default tools
         assert!(payload.system.contains("\"shell\""));
         assert!(payload.system.contains("\"file_read\""));

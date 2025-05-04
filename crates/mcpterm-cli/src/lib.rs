@@ -141,14 +141,14 @@ impl CliApp {
         };
         let find_tool = FindTool::with_config(find_config);
         tool_manager.register_tool(Box::new(find_tool));
-        
+
         // Register diff and patch tools
         let diff_tool = mcp_tools::diff::DiffTool::new();
         tool_manager.register_tool(Box::new(diff_tool));
-        
+
         let patch_tool = mcp_tools::diff::PatchTool::new();
         tool_manager.register_tool(Box::new(patch_tool));
-        
+
         // Register project navigator tool
         let project_navigator = mcp_tools::analysis::ProjectNavigator::new();
         tool_manager.register_tool(Box::new(project_navigator));
@@ -433,12 +433,16 @@ impl CliApp {
 
                         // Check if this content looks like a tool call JSON-RPC (do this before buffering)
                         let content_is_likely_tool_call = chunk.content.contains("\"jsonrpc\"")
-                            && (chunk.content.contains("\"method\"") || chunk.content.contains("\"mcp.tool_call\""));
+                            && (chunk.content.contains("\"method\"")
+                                || chunk.content.contains("\"mcp.tool_call\""));
 
                         if content_is_likely_tool_call {
                             // Mark as tool call preemptively to avoid displaying JSON-RPC
                             is_current_buffer_tool_call = true;
-                            debug_log(&format!("Detected likely tool call in content: {}", chunk.content));
+                            debug_log(&format!(
+                                "Detected likely tool call in content: {}",
+                                chunk.content
+                            ));
                             // Don't add to buffer to avoid printing JSON-RPC
                         } else {
                             // Add to buffer only if not a likely tool call
@@ -465,7 +469,10 @@ impl CliApp {
                     {
                         // Only print if it's NOT part of a tool call
                         if !is_current_buffer_tool_call && !content_buffer.is_empty() {
-                            debug_log(&format!("Printing chunk content (not a tool call): {}", content_buffer));
+                            debug_log(&format!(
+                                "Printing chunk content (not a tool call): {}",
+                                content_buffer
+                            ));
                             self.print_chunk_content(&content_buffer);
                             content_buffer.clear();
                         } else if is_current_buffer_tool_call {
