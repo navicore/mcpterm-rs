@@ -11,6 +11,7 @@ pub struct MockLlmClient {
     // Configuration options
     pub response_content: String,
     pub add_tool_call: bool,
+    pub follow_up_response: Option<String>,
 }
 
 impl Default for MockLlmClient {
@@ -18,6 +19,9 @@ impl Default for MockLlmClient {
         Self {
             response_content: "This is a mock response from the LLM".to_string(),
             add_tool_call: false,
+            follow_up_response: Some(
+                "This is a follow-up response after tool execution".to_string(),
+            ),
         }
     }
 }
@@ -27,6 +31,9 @@ impl MockLlmClient {
         Self {
             response_content: response.to_string(),
             add_tool_call: false,
+            follow_up_response: Some(
+                "This is a follow-up response after tool execution".to_string(),
+            ),
         }
     }
 
@@ -34,11 +41,40 @@ impl MockLlmClient {
         self.add_tool_call = true;
         self
     }
+
+    pub fn with_follow_up(mut self, follow_up: &str) -> Self {
+        self.follow_up_response = Some(follow_up.to_string());
+        self
+    }
+
+    pub fn without_follow_up(mut self) -> Self {
+        self.follow_up_response = None;
+        self
+    }
 }
 
 #[async_trait]
 impl LlmClient for MockLlmClient {
     async fn send_message(&self, context: &ConversationContext) -> Result<LlmResponse> {
+        // Check if this is a follow-up request after a tool call
+        // We can determine this by looking at the last few message roles
+        let is_follow_up_request = context.messages.len() >= 2
+            && matches!(
+                context.messages[context.messages.len() - 1].role,
+                mcp_core::context::MessageRole::Tool
+            );
+
+        if is_follow_up_request && self.follow_up_response.is_some() {
+            // This is a follow-up request after a tool call, use the follow-up response
+            let follow_up_text = self.follow_up_response.as_ref().unwrap().clone();
+
+            return Ok(LlmResponse {
+                id: "mock-follow-up-id".to_string(),
+                content: follow_up_text,
+                tool_calls: vec![], // No tool calls in follow-up response
+            });
+        }
+
         // Extract the user's last message to include in the response
         let last_message = context
             .messages
@@ -77,25 +113,41 @@ impl LlmClient for MockLlmClient {
         &self,
         context: &ConversationContext,
     ) -> Result<Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>> {
-        // Extract the user's last message to include in the response
-        let last_message = context
-            .messages
-            .last()
-            .map(|m| m.content.clone())
-            .unwrap_or_default();
+        // Check if this is a follow-up request after a tool call
+        let is_follow_up_request = context.messages.len() >= 2
+            && matches!(
+                context.messages[context.messages.len() - 1].role,
+                mcp_core::context::MessageRole::Tool
+            );
 
-        // Create the response text with the last message
-        let response_text = format!(
-            "{} (responding to: {})",
-            self.response_content, last_message
-        );
+        let response_text = if is_follow_up_request && self.follow_up_response.is_some() {
+            // Use the follow-up response for tool execution results
+            self.follow_up_response.as_ref().unwrap().clone()
+        } else {
+            // Extract the user's last message to include in the response
+            let last_message = context
+                .messages
+                .last()
+                .map(|m| m.content.clone())
+                .unwrap_or_default();
+
+            // Create the response text with the last message
+            format!(
+                "{} (responding to: {})",
+                self.response_content, last_message
+            )
+        };
 
         // Create a channel for the stream
         let (tx, rx) = mpsc::channel::<Result<StreamChunk>>(5);
 
         // Clone data for the async task
         let response_text_clone = response_text.clone();
-        let add_tool_call = self.add_tool_call;
+        let add_tool_call = if is_follow_up_request {
+            false // No tool calls in follow-up responses
+        } else {
+            self.add_tool_call
+        };
 
         // Spawn a task to simulate streaming the response
         tokio::spawn(async move {
