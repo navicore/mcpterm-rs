@@ -64,7 +64,7 @@ pub struct Cli {
     /// Skip confirmation for tool execution
     #[clap(long)]
     no_tool_confirmation: bool,
-    
+
     /// Automatically approve all tool executions
     #[clap(long, short = 'y')]
     yes: bool,
@@ -129,7 +129,7 @@ pub async fn main() -> Result<()> {
 
     // Check if stdin input is being used
     let using_stdin_input = std::env::var("MCP_STDIN_INPUT").is_ok();
-    
+
     // If using stdin with piped input, provide appropriate warnings
     if using_stdin_input {
         if cli.yes || cli.no_tool_confirmation {
@@ -141,7 +141,7 @@ pub async fn main() -> Result<()> {
             println!("This may cause prompts to hang waiting for approval.");
         }
     }
-    
+
     // Create CLI configuration
     let cli_config = CliConfig {
         model: model_config.model_id.clone(),
@@ -210,16 +210,16 @@ pub async fn main() -> Result<()> {
             let mut input = String::new();
             // Read directly from stdin
             std::io::stdin().read_to_string(&mut input)?;
-            
+
             if !input.trim().is_empty() {
                 println!("Processing prompt ({} characters)...", input.len());
                 debug!("Processing prompt from stdin, length: {}", input.len());
                 let _response = app.run(&input).await?;
-                
+
                 // Add a deliberate delay for tool responses
                 debug!("Waiting for any follow-up responses...");
                 sleep(Duration::from_secs(3)).await;
-                
+
                 debug!(
                     "Context size after processing: {} messages",
                     app.debug_context_size()
