@@ -6,7 +6,9 @@ use aws_sdk_bedrockruntime::Client as BedrockRuntimeClient;
 use aws_smithy_types::Blob;
 use futures::Stream;
 use mcp_core::context::{ConversationContext, MessageRole};
+use mcp_core::prompts::{PromptManager, PromptType, TemplateEngine};
 use mcp_core::protocol::{Request as McpRequest, Response as McpResponse};
+use mcp_metrics::{count, time};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -177,6 +179,7 @@ pub struct BedrockClient {
     client: BedrockRuntimeClient,
     config: BedrockConfig,
     schema_manager: McpSchemaManager,
+    prompt_manager: PromptManager,
     active_requests: RequestMap,
 }
 
@@ -210,6 +213,7 @@ impl BedrockClient {
             client,
             config,
             schema_manager: McpSchemaManager::new(),
+            prompt_manager: PromptManager::new(),
             active_requests: Arc::new(Mutex::new(HashMap::new())),
         })
     }
@@ -218,15 +222,26 @@ impl BedrockClient {
     fn prepare_claude_payload(&self, context: &ConversationContext) -> ClaudePayload {
         let mut claude_messages = Vec::new();
 
-        // Get the enhanced system prompt (including MCP instructions)
-        let system_prompt = match &self.config.system_prompt {
-            Some(custom_prompt) => format!(
-                "{}\n\n{}",
-                self.schema_manager.get_mcp_system_prompt(),
-                custom_prompt
-            ),
-            None => self.schema_manager.get_mcp_system_prompt().to_string(),
-        };
+        // Create a template engine with variables for the system prompt
+        let mut engine = TemplateEngine::new();
+        
+        // Add model-specific variables
+        engine.set_var("model_id", &self.config.model_id);
+        engine.set_var("max_tokens", &self.config.max_tokens.to_string());
+        
+        // Add session info
+        engine.set_var("conversation_length", &context.messages.len().to_string());
+        
+        // Get the system prompt from the prompt manager with template variables substituted
+        let mut system_prompt = self.prompt_manager.get_rendered_system_prompt(&engine);
+        
+        // Add custom prompt if provided in config
+        if let Some(custom_prompt) = &self.config.system_prompt {
+            system_prompt = format!("{}\n\n{}", system_prompt, custom_prompt);
+        }
+        
+        debug!("Using system prompt with {} characters", system_prompt.len());
+        trace!("System prompt content: {}", system_prompt);
 
         // Convert conversation messages to Claude format
         for message in &context.messages {
@@ -357,10 +372,20 @@ impl LlmClient for BedrockClient {
             let mut active_requests = self.active_requests.lock().unwrap();
             active_requests.insert(request_id.clone(), false);
         }
-
+        
+        // Count API calls
+        count!("llm.calls.total");
+        count!("llm.calls.bedrock");
+        
         // Prepare the Claude-specific payload
         let claude_payload = self.prepare_claude_payload(context);
         let payload_bytes = serde_json::to_vec(&claude_payload)?;
+        
+        // Count tokens (approximation)
+        let input_tokens = context.messages.iter()
+            .map(|m| m.content.len() / 4)
+            .sum::<usize>();
+        count!("llm.tokens.input", input_tokens as u64);
 
         debug!("Sending request to Bedrock: {}", self.config.model_id);
         debug!(
@@ -374,24 +399,30 @@ impl LlmClient for BedrockClient {
             serde_json::to_string_pretty(&claude_payload).unwrap_or_default()
         );
 
-        // Send the request to Bedrock
-        let output = match self
-            .client
-            .invoke_model()
-            .body(Blob::new(payload_bytes))
-            .model_id(&self.config.model_id)
-            .send()
-            .await
-        {
-            Ok(response) => response,
-            Err(err) => {
-                error!("Bedrock API error: {:?}", err);
-                // Remove from active requests
-                let mut active_requests = self.active_requests.lock().unwrap();
-                active_requests.remove(&request_id);
-                return Err(anyhow!(BedrockError::ApiError(err.to_string())));
+        // Send the request to Bedrock with timing
+        let output = time!("llm.response_time.bedrock", {
+            match self
+                .client
+                .invoke_model()
+                .body(Blob::new(payload_bytes))
+                .model_id(&self.config.model_id)
+                .send()
+                .await
+            {
+                Ok(response) => response,
+                Err(err) => {
+                    error!("Bedrock API error: {:?}", err);
+                    // Count error
+                    count!("llm.errors");
+                    count!("llm.errors.bedrock");
+                    
+                    // Remove from active requests
+                    let mut active_requests = self.active_requests.lock().unwrap();
+                    active_requests.remove(&request_id);
+                    return Err(anyhow!(BedrockError::ApiError(err.to_string())));
+                }
             }
-        };
+        });
 
         // Parse the response
         let response_bytes = output.body;
@@ -429,11 +460,28 @@ impl LlmClient for BedrockClient {
                     serde_json::to_string_pretty(&claude_response).unwrap_or_default()
                 );
 
-                self.parse_claude_response(&claude_response)
+                let response = self.parse_claude_response(&claude_response)?;
+                
+                // Count output tokens (rough approximation)
+                let output_tokens = response.content.len() / 4;
+                count!("llm.tokens.output", output_tokens as u64);
+                
+                // Count successful completion
+                count!("llm.completions.success");
+                
+                // Count tool calls if any
+                if !response.tool_calls.is_empty() {
+                    count!("llm.tool_calls", response.tool_calls.len() as u64);
+                }
+                
+                Ok(response)
             }
             Err(err) => {
                 warn!("Failed to parse Claude response: {}", err);
                 warn!("Response string: {}", response_str);
+                
+                // Count parsing error
+                count!("llm.errors.parsing");
 
                 // Try alternative parsing strategies
                 debug!("Attempting to extract content from non-standard response");
@@ -444,6 +492,11 @@ impl LlmClient for BedrockClient {
                     if let Some(content) = json_value.get("content") {
                         if let Some(text) = content.as_str() {
                             debug!("Extracted content from non-standard response");
+                            
+                            // Count output tokens (rough approximation)
+                            let output_tokens = text.len() / 4;
+                            count!("llm.tokens.output", output_tokens as u64);
+                            
                             return Ok(LlmResponse {
                                 id: request_id,
                                 content: text.to_string(),
@@ -454,6 +507,11 @@ impl LlmClient for BedrockClient {
 
                     // Return the raw JSON as content as a last resort
                     debug!("Returning raw JSON as content");
+                    
+                    // Count output tokens (rough approximation)
+                    let output_tokens = response_str.len() / 4;
+                    count!("llm.tokens.output", output_tokens as u64);
+                    
                     return Ok(LlmResponse {
                         id: request_id,
                         content: response_str,

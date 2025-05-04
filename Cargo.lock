@@ -2113,9 +2113,11 @@ dependencies = [
  "async-trait",
  "chrono",
  "dirs",
+ "mcp-metrics",
  "regex",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -2139,6 +2141,7 @@ dependencies = [
  "futures",
  "jsonschema",
  "mcp-core",
+ "mcp-metrics",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2184,6 +2187,7 @@ dependencies = [
  "futures",
  "mcp-core",
  "mcp-llm",
+ "mcp-metrics",
  "mcp-resources",
  "mcp-tools",
  "serde",
@@ -2252,6 +2256,7 @@ dependencies = [
  "edtui",
  "mcp-core",
  "mcp-llm",
+ "mcp-metrics",
  "mcp-resources",
  "mcp-runtime",
  "mcp-tools",
@@ -3288,6 +3293,19 @@ checksum = "a75fb188eb626b924683e3b95e3a48e63551fcfb51949de2f06a9d91dbee93c9"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "tempfile"
+version = "3.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7437ac7763b9b123ccf33c338a5cc1bac6f69b45a136c19bdd8a65e3916435bf"
+dependencies = [
+ "fastrand",
+ "getrandom 0.3.2",
+ "once_cell",
+ "rustix 1.0.7",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

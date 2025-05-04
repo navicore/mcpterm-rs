@@ -5,6 +5,7 @@ edition = "2021"
 description = "LLM provider adapters for Model Context Protocol"
 
 [dependencies]
+mcp-metrics = { path = "../mcp-metrics" }
 mcp-core = { path = "../mcp-core" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }

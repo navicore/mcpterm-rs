@@ -5,6 +5,7 @@ edition = "2021"
 description = "Core types and protocol definition for Model Context Protocol"
 
 [dependencies]
+mcp-metrics = { path = "../mcp-metrics" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
@@ -21,3 +22,4 @@ dirs = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+tempfile = { workspace = true }

@@ -6,6 +6,7 @@ description = "Terminal UI for Model Context Protocol"
 
 [dependencies]
 mcp-core = { path = "../mcp-core" }
+mcp-metrics = { path = "../mcp-metrics" }
 mcp-llm = { path = "../mcp-llm" }
 mcp-runtime = { path = "../mcp-runtime" }
 mcp-tools = { path = "../mcp-tools" }

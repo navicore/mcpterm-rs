@@ -6,6 +6,7 @@ description = "Runtime execution environment for Model Context Protocol"
 
 [dependencies]
 mcp-core = { path = "../mcp-core" }
+mcp-metrics = { path = "../mcp-metrics" }
 mcp-resources = { path = "../mcp-resources" }
 mcp-tools = { path = "../mcp-tools" }
 mcp-llm = { path = "../mcp-llm" }

@@ -74,14 +74,16 @@ async fn main() -> Result<()> {
     debug!("Log level debugging enabled");
     trace!("Log level tracing enabled - will show detailed API requests/responses");
 
-    // Setup metrics reporting
-    let log_destination = LogDestination;
+    // In CLI we don't need periodic reporting since most runs are short-lived
+    // Instead, we'll log once at the end of execution
+    // But we'll keep a background task just in case a CLI session runs for a long time
+    let log_destination_bg = LogDestination;
     tokio::spawn(async move {
         loop {
             sleep(Duration::from_secs(300)).await; // Report every 5 minutes
             let report = MetricsRegistry::global().generate_report();
-            if let Err(e) = log_destination.send_report(&report) {
-                debug!("Error sending metrics report: {}", e);
+            if let Err(e) = log_destination_bg.send_report(&report) {
+                debug!("Error sending periodic metrics report: {}", e);
             }
         }
     });
@@ -147,6 +149,14 @@ async fn main() -> Result<()> {
             eprintln!("Error: No prompt or input file provided");
             std::process::exit(1);
         }
+    }
+
+    // Log metrics report at info level before exiting
+    info!("Generating metrics summary for this CLI execution");
+    let log_destination = LogDestination;
+    let report = MetricsRegistry::global().generate_report();
+    if let Err(e) = log_destination.send_report(&report) {
+        debug!("Error sending final metrics report: {}", e);
     }
 
     debug!("Exiting mcpterm-cli");
