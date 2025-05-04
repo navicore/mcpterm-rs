@@ -18,3 +18,11 @@ walkdir = { workspace = true }
 globset = { workspace = true }
 wait-timeout = { workspace = true }
 regex = { workspace = true }
+chrono = { workspace = true }
+similar = "2.4.0"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["full", "test-util"] }
+serde_json = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

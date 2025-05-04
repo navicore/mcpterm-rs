@@ -1,0 +1,20 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Terminal-based AI coding assistant using MCP protocol"
+
+[[bin]]
+name = "mcp"
+path = "src/main.rs"
+
+[dependencies]
+# Our internal crates
+mcpterm-cli = { path = "../mcpterm-cli" }
+mcpterm-tui = { path = "../mcpterm-tui" }
+
+# Required for main.rs
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+atty = "0.2.14"

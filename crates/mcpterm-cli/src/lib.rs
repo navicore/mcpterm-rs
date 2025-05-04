@@ -6,6 +6,7 @@ use mcp_llm::{BedrockClient, BedrockConfig, LlmClient, StreamChunk};
 use mcp_metrics::{count, gauge, time};
 use mcp_tools::{
     filesystem::{FilesystemConfig, ListDirectoryTool, ReadFileTool, WriteFileTool},
+    search::{FindConfig, FindTool, GrepConfig, GrepTool},
     shell::{ShellConfig, ShellTool},
     ToolManager, ToolResult, ToolStatus,
 };
@@ -121,8 +122,36 @@ impl CliApp {
         let write_file_tool = WriteFileTool::with_config(filesystem_config.clone());
         tool_manager.register_tool(Box::new(write_file_tool));
 
-        let list_dir_tool = ListDirectoryTool::with_config(filesystem_config);
+        let list_dir_tool = ListDirectoryTool::with_config(filesystem_config.clone());
         tool_manager.register_tool(Box::new(list_dir_tool));
+
+        // Register search tools
+        let grep_config = GrepConfig {
+            denied_paths: filesystem_config.denied_paths.clone(),
+            allowed_paths: filesystem_config.allowed_paths.clone(),
+            ..GrepConfig::default()
+        };
+        let grep_tool = GrepTool::with_config(grep_config);
+        tool_manager.register_tool(Box::new(grep_tool));
+
+        let find_config = FindConfig {
+            denied_paths: filesystem_config.denied_paths.clone(),
+            allowed_paths: filesystem_config.allowed_paths.clone(),
+            ..FindConfig::default()
+        };
+        let find_tool = FindTool::with_config(find_config);
+        tool_manager.register_tool(Box::new(find_tool));
+
+        // Register diff and patch tools
+        let diff_tool = mcp_tools::diff::DiffTool::new();
+        tool_manager.register_tool(Box::new(diff_tool));
+
+        let patch_tool = mcp_tools::diff::PatchTool::new();
+        tool_manager.register_tool(Box::new(patch_tool));
+
+        // Register project navigator tool
+        let project_navigator = mcp_tools::analysis::ProjectNavigator::new();
+        tool_manager.register_tool(Box::new(project_navigator));
 
         Self {
             context: ConversationContext::new(),
@@ -218,6 +247,21 @@ impl CliApp {
         self
     }
 
+    // Helper method to handle Bedrock client initialization errors
+    fn handle_bedrock_client_error(&self, e: anyhow::Error) -> Result<()> {
+        // Print helpful error message about credentials
+        eprintln!("Failed to initialize AWS Bedrock client: {}", e);
+        eprintln!("Please ensure you have valid AWS credentials configured.");
+        eprintln!("You can set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables,");
+        eprintln!("or configure credentials in ~/.aws/credentials file.");
+        eprintln!(
+            "Also verify that the model ID '{}' is available in your AWS region.",
+            self.config.model
+        );
+
+        Err(e)
+    }
+
     pub async fn initialize(&mut self) -> Result<()> {
         // Check if we already have a client (could be a mock for testing)
         if self.llm_client.is_some() {
@@ -258,27 +302,41 @@ impl CliApp {
         count!("app.initialization");
         gauge!("app.mcp_enabled", if self.config.use_mcp { 1 } else { 0 });
 
-        // Create the Bedrock client - it will initialize AWS SDK config internally
+        // Create the Bedrock client with dynamic tool documentation if MCP is enabled
         debug_log("Creating BedrockClient");
-        let client = match BedrockClient::new(bedrock_config).await {
-            Ok(client) => {
-                debug_log("Successfully created BedrockClient");
-                client
+        let client = if self.config.use_mcp {
+            // Generate tool documentation from the tool manager
+            let tools_doc = self.tool_manager.generate_tool_documentation();
+            debug_log(&format!(
+                "Generated tool documentation with {} characters",
+                tools_doc.len()
+            ));
+            trace!("Tool documentation: {}", tools_doc);
+
+            // Create client with tool documentation
+            match BedrockClient::with_tool_documentation(bedrock_config, tools_doc).await {
+                Ok(client) => {
+                    debug_log("Successfully created BedrockClient with dynamic tool documentation");
+                    client
+                }
+                Err(e) => {
+                    debug_log(&format!("Failed to create BedrockClient: {}", e));
+                    self.handle_bedrock_client_error(e)?;
+                    unreachable!(); // This line won't be reached as handle_bedrock_client_error always returns Err
+                }
             }
-            Err(e) => {
-                debug_log(&format!("Failed to create BedrockClient: {}", e));
-
-                // Print helpful error message about credentials
-                eprintln!("Failed to initialize AWS Bedrock client: {}", e);
-                eprintln!("Please ensure you have valid AWS credentials configured.");
-                eprintln!("You can set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables,");
-                eprintln!("or configure credentials in ~/.aws/credentials file.");
-                eprintln!(
-                    "Also verify that the model ID '{}' is available in your AWS region.",
-                    self.config.model
-                );
-
-                return Err(e);
+        } else {
+            // Create client without tool documentation for non-MCP mode
+            match BedrockClient::new(bedrock_config).await {
+                Ok(client) => {
+                    debug_log("Successfully created BedrockClient");
+                    client
+                }
+                Err(e) => {
+                    debug_log(&format!("Failed to create BedrockClient: {}", e));
+                    self.handle_bedrock_client_error(e)?;
+                    unreachable!(); // This line won't be reached as handle_bedrock_client_error always returns Err
+                }
             }
         };
 
@@ -375,12 +433,17 @@ impl CliApp {
 
                         // Check if this content looks like a tool call JSON-RPC (do this before buffering)
                         let content_is_likely_tool_call = chunk.content.contains("\"jsonrpc\"")
-                            && chunk.content.contains("\"method\"")
-                            && chunk.content.contains("\"mcp.tool_call\"");
+                            && (chunk.content.contains("\"method\"")
+                                || chunk.content.contains("\"mcp.tool_call\""));
 
                         if content_is_likely_tool_call {
                             // Mark as tool call preemptively to avoid displaying JSON-RPC
                             is_current_buffer_tool_call = true;
+                            debug_log(&format!(
+                                "Detected likely tool call in content: {}",
+                                chunk.content
+                            ));
+                            // Don't add to buffer to avoid printing JSON-RPC
                         } else {
                             // Add to buffer only if not a likely tool call
                             content_buffer.push_str(&chunk.content);
@@ -402,11 +465,19 @@ impl CliApp {
 
                     // If we have completed a chunk or this is the final chunk, process the buffer
                     if chunk.is_complete
-                        || !is_current_buffer_tool_call && chunk.content.contains("\n")
+                        || (!is_current_buffer_tool_call && chunk.content.contains("\n"))
                     {
                         // Only print if it's NOT part of a tool call
                         if !is_current_buffer_tool_call && !content_buffer.is_empty() {
+                            debug_log(&format!(
+                                "Printing chunk content (not a tool call): {}",
+                                content_buffer
+                            ));
                             self.print_chunk_content(&content_buffer);
+                            content_buffer.clear();
+                        } else if is_current_buffer_tool_call {
+                            // Clear the buffer but don't print it if it's a tool call
+                            debug_log("Skipping printing tool call JSON-RPC");
                             content_buffer.clear();
                         }
 

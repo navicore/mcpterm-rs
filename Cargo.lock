@@ -118,6 +118,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
+name = "app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atty",
+ "mcpterm-cli",
+ "mcpterm-tui",
+ "tokio",
+]
+
+[[package]]
 name = "arboard"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2126,17 +2137,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mcp"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "atty",
- "mcpterm-cli",
- "mcpterm-tui",
- "tokio",
-]
-
-[[package]]
 name = "mcp-core"
 version = "0.1.0"
 dependencies = [
@@ -2173,6 +2173,7 @@ dependencies = [
  "jsonschema",
  "mcp-core",
  "mcp-metrics",
+ "mcp-tools",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2235,15 +2236,19 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "globset",
  "mcp-core",
  "mcp-resources",
  "regex",
  "serde",
  "serde_json",
+ "similar",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "wait-timeout",
  "walkdir",
 ]
@@ -3184,6 +3189,12 @@ name = "simd-adler32"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
+
+[[package]]
+name = "similar"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "slab"

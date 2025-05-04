@@ -24,6 +24,7 @@ async fn main() -> Result<()> {
             streaming: true,
             enable_tools: true,
             require_tool_confirmation: false, // Don't require confirmation in tests
+            auto_approve_tools: true,         // Auto-approve tools in tests
         });
 
     // Run the app with a test prompt
