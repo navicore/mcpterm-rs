@@ -342,10 +342,20 @@ impl BedrockClient {
 
                     // Check if it's a tool call
                     if let Some(result) = mcp_response.result {
-                        // Regular response
+                        // Regular response - extract the actual content
+                        // If result is a string, use it directly
+                        let content = if let Some(text) = result.as_str() {
+                            text.to_string()
+                        } else {
+                            // Otherwise stringify it, preserving formatting
+                            result.to_string()
+                        };
+                        
+                        trace!("Extracted result content from MCP response: {}", content);
+                        
                         Ok(LlmResponse {
                             id: response.id.clone(),
-                            content: result.to_string(),
+                            content,
                             tool_calls: Vec::new(),
                         })
                     } else if mcp_response.error.is_some() {
@@ -444,7 +454,7 @@ impl LlmClient for BedrockClient {
 
         // Log detailed request JSON at TRACE level (only shown with LOG_LEVEL=trace)
         trace!(
-            "Raw JSON request payload to Bedrock: {}",
+            ">>> RAW REQUEST TO LLM >>>\n{}",
             serde_json::to_string_pretty(&claude_payload).unwrap_or_default()
         );
 
@@ -487,7 +497,7 @@ impl LlmClient for BedrockClient {
         let response_bytes = output.body;
         let response_str = String::from_utf8(response_bytes.as_ref().to_vec())?;
         // Log full raw response at TRACE level (only shown with LOG_LEVEL=trace)
-        trace!("Raw JSON response from Bedrock: {}", response_str);
+        trace!("<<< RAW RESPONSE FROM LLM <<<\n{}", response_str);
 
         // Check if request was cancelled
         {

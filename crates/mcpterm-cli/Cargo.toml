@@ -26,3 +26,6 @@ aws-sdk-bedrockruntime = { workspace = true }
 # For the mock implementation
 async-trait = { workspace = true }
 tokio-stream = { version = "0.1" }
+
+# For terminal color support detection
+atty = "0.2"
