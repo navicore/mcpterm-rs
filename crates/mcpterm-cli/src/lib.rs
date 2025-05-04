@@ -1,11 +1,23 @@
 use anyhow::{anyhow, Result};
 use futures::StreamExt;
-use mcp_core::context::ConversationContext;
+use mcp_core::context::{ConversationContext, MessageRole};
 use mcp_core::{api_log, debug_log};
 use mcp_llm::{BedrockClient, BedrockConfig, LlmClient};
 use mcp_metrics::{count, gauge, time};
+use mcp_tools::{
+    ToolManager, ToolResult, ToolStatus,
+    shell::{ShellTool, ShellConfig},
+    filesystem::{
+        FilesystemConfig, 
+        ReadFileTool, 
+        WriteFileTool, 
+        ListDirectoryTool
+    }
+};
+use serde_json::Value;
 use std::io::Write;
 use std::sync::Arc;
+use tracing::{debug, info, error, trace};
 
 // Export our mock implementation for tests
 pub mod mock;
@@ -14,6 +26,7 @@ pub struct CliApp {
     context: ConversationContext,
     llm_client: Option<Arc<dyn LlmClient + Send + Sync>>,
     config: CliConfig,
+    tool_manager: ToolManager,
 }
 
 #[derive(Debug)]
@@ -22,31 +35,155 @@ pub struct CliConfig {
     pub use_mcp: bool,
     pub region: Option<String>,
     pub streaming: bool,
+    pub enable_tools: bool,
+    pub require_tool_confirmation: bool,
 }
 
 impl Default for CliConfig {
     fn default() -> Self {
         Self {
             model: "anthropic.claude-3-sonnet-20240229-v1:0".to_string(),
-            use_mcp: false,
+            use_mcp: true, // Enable MCP by default for tool execution
             region: None,
             streaming: true,
+            enable_tools: true, // Enable tool execution by default
+            require_tool_confirmation: true, // Require user confirmation for tool execution
         }
     }
 }
 
 impl CliApp {
     pub fn new() -> Self {
+        // Create a new tool manager
+        let mut tool_manager = ToolManager::new();
+        
+        // Register the shell tool with configuration
+        let shell_config = ShellConfig {
+            default_timeout_ms: 30000, // 30 seconds default timeout
+            max_timeout_ms: 300000,    // 5 minutes maximum timeout
+            allowed_commands: None,    // No specific whitelist
+            denied_commands: Some(vec![
+                "rm -rf".to_string(),      // Prevent dangerous recursive deletion
+                "sudo".to_string(),        // Prevent sudo commands
+                "chmod".to_string(),       // Prevent permission changes
+                "chown".to_string(),       // Prevent ownership changes
+                "mkfs".to_string(),        // Prevent formatting
+                "dd".to_string(),          // Prevent raw disk operations
+                "shutdown".to_string(),    // Prevent shutdown
+                "reboot".to_string(),      // Prevent reboot
+                "halt".to_string(),        // Prevent halt
+            ]),
+        };
+        
+        let shell_tool = ShellTool::with_config(shell_config);
+        tool_manager.register_tool(Box::new(shell_tool));
+        
+        // Register filesystem tools with default configuration
+        let filesystem_config = FilesystemConfig {
+            // Use default denied paths to protect sensitive areas
+            denied_paths: Some(vec![
+                "/etc/".to_string(),
+                "/var/".to_string(),
+                "/usr/".to_string(),
+                "/bin/".to_string(), 
+                "/sbin/".to_string(),
+                "/.ssh/".to_string(),
+                "/.aws/".to_string(),
+                "/.config/".to_string(),
+                "C:\\Windows\\".to_string(),
+                "C:\\Program Files\\".to_string(),
+                "C:\\Program Files (x86)\\".to_string(),
+            ]),
+            allowed_paths: None, // Allow all paths not explicitly denied
+            max_file_size: 10 * 1024 * 1024, // 10 MB max file size
+        };
+        
+        let read_file_tool = ReadFileTool::with_config(filesystem_config.clone());
+        tool_manager.register_tool(Box::new(read_file_tool));
+        
+        let write_file_tool = WriteFileTool::with_config(filesystem_config.clone());
+        tool_manager.register_tool(Box::new(write_file_tool));
+        
+        let list_dir_tool = ListDirectoryTool::with_config(filesystem_config);
+        tool_manager.register_tool(Box::new(list_dir_tool));
+        
         Self {
             context: ConversationContext::new(),
             llm_client: None,
             config: CliConfig::default(),
+            tool_manager,
         }
     }
 
     pub fn with_config(mut self, config: CliConfig) -> Self {
         self.config = config;
         self
+    }
+    
+    // Add a method to handle tool calls
+    async fn execute_tool(&mut self, tool_id: &str, params: Value) -> Result<ToolResult> {
+        // Check if tools are enabled
+        if !self.config.enable_tools {
+            return Ok(ToolResult {
+                tool_id: tool_id.to_string(),
+                status: ToolStatus::Failure,
+                output: serde_json::json!({
+                    "error": "Tool execution is disabled"
+                }),
+                error: Some("Tool execution is disabled in the configuration".to_string()),
+            });
+        }
+        
+        info!("Executing tool: {} with params: {}", tool_id, params);
+        
+        // Get user confirmation if required
+        if self.config.require_tool_confirmation {
+            println!("\n[Tool Execution Request]");
+            println!("Tool: {}", tool_id);
+            println!("Parameters: {}", params);
+            print!("Allow execution? [y/N]: ");
+            std::io::stdout().flush().unwrap();
+            
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).unwrap();
+            
+            if !input.trim().eq_ignore_ascii_case("y") {
+                info!("Tool execution denied by user");
+                return Ok(ToolResult {
+                    tool_id: tool_id.to_string(),
+                    status: ToolStatus::Failure,
+                    output: serde_json::json!({
+                        "error": "Tool execution denied by user"
+                    }),
+                    error: Some("User denied tool execution".to_string()),
+                });
+            }
+        }
+        
+        // Track metrics
+        count!("tool.executions.total");
+        count!(format!("tool.executions.{}", tool_id).as_str());
+        
+        // Execute the tool with timing
+        let result = time!(format!("tool.execution_time.{}", tool_id).as_str(), {
+            self.tool_manager.execute_tool(tool_id, params).await
+        });
+        
+        // Track result metrics
+        match &result {
+            Ok(tool_result) => {
+                match tool_result.status {
+                    ToolStatus::Success => count!("tool.executions.success"),
+                    ToolStatus::Failure => count!("tool.executions.failure"),
+                    ToolStatus::Timeout => count!("tool.executions.timeout"),
+                }
+            }
+            Err(_) => {
+                count!("tool.executions.error");
+            }
+        }
+        
+        result
     }
 
     // Add a method to set a custom LLM client (useful for testing)
@@ -185,19 +322,231 @@ impl CliApp {
                                         count!("llm.stream_chunks", 1);
                                     }
 
-                                    // If this is a tool call, handle it (not implemented yet)
+                                    // If this is a tool call, handle it
                                     if chunk.is_tool_call {
-                                        debug_log(&format!(
-                                            "Tool call received: {:?}",
-                                            chunk.tool_call
-                                        ));
+                                        debug!("Tool call received: {:?}", chunk.tool_call);
                                         count!("llm.tool_calls", 1);
+                                        
+                                        if let Some(tool_call) = &chunk.tool_call {
+                                            // Extract tool name and parameters
+                                            let tool_name = &tool_call.tool;
+                                            let params = &tool_call.params;
+                                            
+                                            info!("Processing tool call: {}", tool_name);
+                                            
+                                            // Execute the tool (store the result so we don't have borrow issues)
+                                            let tool_result = self.execute_tool(tool_name, params.clone()).await;
+                                            
+                                            match tool_result {
+                                                Ok(result) => {
+                                                    // Format the result for display
+                                                    let status_str = match result.status {
+                                                        ToolStatus::Success => "SUCCESS",
+                                                        ToolStatus::Failure => "FAILURE",
+                                                        ToolStatus::Timeout => "TIMEOUT",
+                                                    };
+                                                    
+                                                    // Display the result to the user
+                                                    println!("\n[Tool Result: {}]", status_str);
+                                                    println!("Output: {}", result.output);
+                                                    if let Some(err) = &result.error {
+                                                        println!("Error: {}", err);
+                                                    }
+                                                    
+                                                    // Add the tool result to the context
+                                                    // Format using the JSON-RPC 2.0 response format for MCP
+                                                    let output_json = serde_json::to_string(&result.output)
+                                                        .unwrap_or_else(|_| "\"Failed to serialize result\"".to_string());
+                                                    
+                                                    // Format as a standard MCP tool response using JSON-RPC 2.0
+                                                    let formatted_result = format!(
+                                                        "{{\"jsonrpc\": \"2.0\", \"result\": {}, \"id\": \"tool_result\"}}", 
+                                                        output_json
+                                                    );
+                                                    
+                                                    debug!("Adding tool result to context: {}", formatted_result);
+                                                    // Log tool result at trace level for detailed debugging
+                                                    trace!("Tool execution result full JSON-RPC response: {}", 
+                                                           serde_json::to_string_pretty(&result).unwrap_or_default());
+                                                    
+                                                    // Add the tool result to the conversation context
+                                                    self.context.add_tool_message(&formatted_result);
+                                                    
+                                                    // We'll handle follow-up in the is_complete section
+                                                }
+                                                Err(e) => {
+                                                    error!("Error executing tool: {}", e);
+                                                    println!("\n[Tool Execution Error]");
+                                                    println!("Failed to execute tool '{}': {}", tool_name, e);
+                                                    
+                                                    // Format as a standard MCP error response using JSON-RPC 2.0
+                                                    let error_result = format!(
+                                                        "{{\"jsonrpc\": \"2.0\", \"error\": {{\"code\": -32000, \"message\": \"Failed to execute tool: {}\"}}, \"id\": \"tool_result\"}}", 
+                                                        e
+                                                    );
+                                                    debug!("Adding tool error to context: {}", error_result);
+                                                    self.context.add_tool_message(&error_result);
+                                                }
+                                            }
+                                        }
                                     }
 
                                     // If this is the final chunk, we're done
                                     if chunk.is_complete {
-                                        debug_log("Final chunk received");
+                                        debug!("Final chunk received");
                                         println!(); // Add a newline after completion
+                                        
+                                        // Check if we had a tool call and need a follow-up
+                                        if chunk.is_tool_call {
+                                            // Get a follow-up response with the tool results
+                                            info!("Getting follow-up response with tool results...");
+                                            
+                                            // Get a fresh reference to the client since the original might be invalidated
+                                            let follow_up_client = self.llm_client.as_ref().unwrap();
+                                            let follow_up_result = follow_up_client.stream_message(&self.context).await;
+                                            
+                                            match follow_up_result {
+                                                Ok(mut follow_up_stream) => {
+                                                    println!("Response: ");
+                                                    let mut follow_up_content = String::new();
+                                                    
+                                                    while let Some(follow_up_chunk_result) = follow_up_stream.next().await {
+                                                        match follow_up_chunk_result {
+                                                            Ok(follow_up_chunk) => {
+                                                                if !follow_up_chunk.content.is_empty() {
+                                                                    print!("{}", follow_up_chunk.content);
+                                                                    let _ = std::io::stdout().flush();
+                                                                    follow_up_content.push_str(&follow_up_chunk.content);
+                                                                }
+                                                                
+                                                                if follow_up_chunk.is_complete {
+                                                                    println!();
+                                                                    info!("Follow-up response complete, breaking from stream loop");
+                                                                    break;
+                                                                }
+                                                            }
+                                                            Err(e) => {
+                                                                error!("Error in follow-up stream: {}", e);
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // Check if the follow-up content is empty or contains another tool call
+                                                    if follow_up_content.trim().is_empty() || follow_up_content.contains("mcp.tool_call") {
+                                                        debug!("FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying...");
+                                                        
+                                                        // Extract the tool result for the fallback message
+                                                        let tool_result_output = match self.context.messages.last() {
+                                                            Some(message) if matches!(message.role, MessageRole::Tool) => {
+                                                                message.content.clone()
+                                                            },
+                                                            _ => "\"Tool result not found\"".to_string()
+                                                        };
+                                                        
+                                                        // Add an explicit message to help Claude understand what happened
+                                                        // Using a more detailed prompt to get an actual answer, not another tool call
+                                                        let instruction = format!(
+                                                            "I've executed the requested tool and received the following result: {}. \
+                                                            Now I need to provide a direct human-readable answer based on this result. \
+                                                            The tool has already been executed successfully. \
+                                                            I will not make another tool call. \
+                                                            Instead, I'll synthesize a concise answer for the user based on the tool result above.",
+                                                            tool_result_output
+                                                        );
+                                                        
+                                                        self.context.add_assistant_message(&instruction);
+                                                        
+                                                        // Try one more time with an explicit request for a response
+                                                        info!("Getting follow-up response with explicit instruction...");
+                                                        
+                                                        // Sleep a bit before retry
+                                                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                                                        
+                                                        let retry_client = self.llm_client.as_ref().unwrap();
+                                                        let retry_result = retry_client.stream_message(&self.context).await;
+                                                        
+                                                        match retry_result {
+                                                            Ok(mut retry_stream) => {
+                                                                println!("Response: ");  // Changed from "Retry Response:" to just "Response:"
+                                                                let mut retry_content = String::new();
+                                                                
+                                                                while let Some(retry_chunk_result) = retry_stream.next().await {
+                                                                    if let Ok(retry_chunk) = retry_chunk_result {
+                                                                        if !retry_chunk.content.is_empty() {
+                                                                            print!("{}", retry_chunk.content);
+                                                                            let _ = std::io::stdout().flush();
+                                                                            retry_content.push_str(&retry_chunk.content);
+                                                                        }
+                                                                        
+                                                                        if retry_chunk.is_complete {
+                                                                            println!();
+                                                                            break;
+                                                                        }
+                                                                    }
+                                                                }
+                                                                
+                                                                // Use the retry content if it's not empty and not another tool call
+                                                                if !retry_content.trim().is_empty() && !retry_content.contains("mcp.tool_call") {
+                                                                    debug!("RETRY FOLLOW-UP RESPONSE RECEIVED: {}", retry_content);
+                                                                    self.context.add_assistant_message(&retry_content);
+                                                                    response_content = retry_content;
+                                                                } else {
+                                                                    debug!("RETRY STILL PROBLEMATIC! Using fallback response.");
+                                                                    
+                                                                    // Parse the tool result to extract meaningful information for the fallback
+                                                                    let parsed_result: Result<serde_json::Value, _> = serde_json::from_str(&tool_result_output);
+                                                                    let fallback_message = match parsed_result {
+                                                                        Ok(json) => {
+                                                                            if let Some(result) = json.get("result") {
+                                                                                if let Some(stdout) = result.get("stdout") {
+                                                                                    if let Some(stdout_str) = stdout.as_str() {
+                                                                                        format!("Command executed successfully. Result: {}", stdout_str.trim())
+                                                                                    } else {
+                                                                                        "Command executed successfully.".to_string()
+                                                                                    }
+                                                                                } else {
+                                                                                    format!("Command executed. Result: {}", result.to_string())
+                                                                                }
+                                                                            } else if let Some(err) = json.get("error") {
+                                                                                format!("Command execution error: {}", err)
+                                                                            } else {
+                                                                                format!("Tool executed with result: {}", json)
+                                                                            }
+                                                                        },
+                                                                        Err(_) => "Tool executed successfully.".to_string()
+                                                                    };
+                                                                    
+                                                                    println!("Response: {}", fallback_message);
+                                                                    self.context.add_assistant_message(&fallback_message);
+                                                                    response_content = fallback_message;
+                                                                }
+                                                            }
+                                                            Err(e) => {
+                                                                error!("Error in retry follow-up stream: {}", e);
+                                                                // Create a fallback response
+                                                                let fallback_message = "The command was executed, but there was an error getting a detailed response.";
+                                                                println!("Response: {}", fallback_message);
+                                                                self.context.add_assistant_message(fallback_message);
+                                                                response_content = fallback_message.to_string();
+                                                            }
+                                                        }
+                                                    } else {
+                                                        // We have a non-empty follow-up response that's not a tool call, use it
+                                                        self.context.add_assistant_message(&follow_up_content);
+                                                        debug!("Received valid follow-up response after tool execution: length={} chars", follow_up_content.len());
+                                                        response_content = follow_up_content;
+                                                    }
+                                                    
+                                                    // Sleep for a longer time to ensure all outputs are properly processed
+                                                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                                                }
+                                                Err(e) => {
+                                                    error!("Failed to get follow-up response: {}", e);
+                                                }
+                                            }
+                                        }
+                                        
                                         break;
                                     }
                                 }
@@ -258,14 +607,184 @@ impl CliApp {
             debug_log("Adding assistant message to conversation");
             self.context.add_assistant_message(&response.content);
 
-            // Record metrics for tool calls if any
+            // Handle tool calls if any
             if !response.tool_calls.is_empty() {
-                debug_log(&format!("Found {} tool calls", response.tool_calls.len()));
+                debug!("Found {} tool calls", response.tool_calls.len());
                 count!("llm.tool_calls", response.tool_calls.len() as u64);
-                for tool_call in &response.tool_calls {
-                    debug_log(&format!("Tool call: {}", tool_call.tool));
+                
+                // Store all the tool calls
+                let tool_calls = response.tool_calls.clone();
+                
+                // Process each tool call
+                for tool_call in &tool_calls {
+                    debug!("Tool call: {}", tool_call.tool);
                     let metric_name = &format!("llm.tool_calls.{}", tool_call.tool);
                     count!(metric_name, 1);
+                    
+                    // Process the tool call
+                    let tool_name = &tool_call.tool;
+                    let params = &tool_call.params;
+                    
+                    info!("Processing tool call: {}", tool_name);
+                    
+                    // Execute the tool
+                    let tool_result = self.execute_tool(tool_name, params.clone()).await;
+                    
+                    match tool_result {
+                        Ok(result) => {
+                            // Format the result for display
+                            let status_str = match result.status {
+                                ToolStatus::Success => "SUCCESS",
+                                ToolStatus::Failure => "FAILURE",
+                                ToolStatus::Timeout => "TIMEOUT",
+                            };
+                            
+                            // Display the result to the user
+                            println!("\n[Tool Result: {}]", status_str);
+                            println!("Output: {}", result.output);
+                            if let Some(err) = &result.error {
+                                println!("Error: {}", err);
+                            }
+                            
+                            // Add the tool result to the context
+                            // Format using the JSON-RPC 2.0 response format for MCP
+                            let output_json = serde_json::to_string(&result.output)
+                                .unwrap_or_else(|_| "\"Failed to serialize result\"".to_string());
+                            
+                            // Format as a standard MCP tool response using JSON-RPC 2.0
+                            let formatted_result = format!(
+                                "{{\"jsonrpc\": \"2.0\", \"result\": {}, \"id\": \"tool_result\"}}", 
+                                output_json
+                            );
+                            
+                            debug!("Adding tool result to context: {}", formatted_result);
+                            // Log tool result at trace level for detailed debugging
+                            trace!("Tool execution result full JSON-RPC response (non-streaming): {}", 
+                                   serde_json::to_string_pretty(&result).unwrap_or_default());
+                            
+                            // Add the tool result to the conversation context
+                            self.context.add_tool_message(&formatted_result);
+                            
+                            // Continue the conversation with the tool result
+                            debug!("Tool execution complete, will get follow-up response");
+                        }
+                        Err(e) => {
+                            error!("Error executing tool: {}", e);
+                            println!("\n[Tool Execution Error]");
+                            println!("Failed to execute tool '{}': {}", tool_name, e);
+                            
+                            // Format as a standard MCP error response using JSON-RPC 2.0
+                            let error_result = format!(
+                                "{{\"jsonrpc\": \"2.0\", \"error\": {{\"code\": -32000, \"message\": \"Failed to execute tool: {}\"}}, \"id\": \"tool_result\"}}", 
+                                e
+                            );
+                            debug!("Adding tool error to context: {}", error_result);
+                            self.context.add_tool_message(&error_result);
+                        }
+                    }
+                }
+                
+                // Get a new response with the tool results
+                info!("Getting follow-up response with tool results...");
+                // At this point, the client variable from earlier is no longer being used
+                // Get a fresh reference to the LLM client
+                let client = self.llm_client.as_ref().unwrap();
+                let follow_up_response = client.send_message(&self.context).await?;
+                
+                // Check if the follow-up content is empty or contains another tool call
+                if follow_up_response.content.trim().is_empty() || follow_up_response.content.contains("mcp.tool_call") {
+                    debug!("FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying...");
+                    
+                    // Extract the tool result for the fallback message
+                    let tool_result_output = match self.context.messages.last() {
+                        Some(message) if matches!(message.role, MessageRole::Tool) => {
+                            message.content.clone()
+                        },
+                        _ => "\"Tool result not found\"".to_string()
+                    };
+                    
+                    // Add an explicit message to help Claude understand what happened
+                    // Using a more detailed prompt to get an actual answer, not another tool call
+                    let instruction = format!(
+                        "I've executed the requested tool and received the following result: {}. \
+                        Now I need to provide a direct human-readable answer based on this result. \
+                        The tool has already been executed successfully. \
+                        I will not make another tool call. \
+                        Instead, I'll synthesize a concise answer for the user based on the tool result above.",
+                        tool_result_output
+                    );
+                    
+                    self.context.add_assistant_message(&instruction);
+                    
+                    // Try one more time with an explicit request for a response
+                    info!("Getting follow-up response with explicit instruction...");
+                    
+                    // Sleep a bit before retry
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    
+                    let retry_client = self.llm_client.as_ref().unwrap();
+                    let retry_response = retry_client.send_message(&self.context).await?;
+                    
+                    // Use the retry content if it's not empty and not another tool call
+                    if !retry_response.content.trim().is_empty() && !retry_response.content.contains("mcp.tool_call") {
+                        debug!("RETRY FOLLOW-UP RESPONSE RECEIVED: {}", retry_response.content);
+                        
+                        self.context.add_assistant_message(&retry_response.content);
+                        
+                        // Print and return the retry response
+                        println!("Response: {}", retry_response.content);
+                        debug!("Tool call flow completed successfully with retry");
+                        return Ok(retry_response.content);
+                    } else {
+                        debug!("RETRY STILL PROBLEMATIC! Using fallback response.");
+                        
+                        // Parse the tool result to extract meaningful information for the fallback
+                        let parsed_result: Result<serde_json::Value, _> = serde_json::from_str(&tool_result_output);
+                        let fallback_message = match parsed_result {
+                            Ok(json) => {
+                                if let Some(result) = json.get("result") {
+                                    if let Some(stdout) = result.get("stdout") {
+                                        if let Some(stdout_str) = stdout.as_str() {
+                                            format!("Command executed successfully. Result: {}", stdout_str.trim())
+                                        } else {
+                                            "Command executed successfully.".to_string()
+                                        }
+                                    } else {
+                                        format!("Command executed. Result: {}", result.to_string())
+                                    }
+                                } else if let Some(err) = json.get("error") {
+                                    format!("Command execution error: {}", err)
+                                } else {
+                                    format!("Tool executed with result: {}", json)
+                                }
+                            },
+                            Err(_) => "Tool executed successfully.".to_string()
+                        };
+                        
+                        self.context.add_assistant_message(&fallback_message);
+                        
+                        // Print and return the fallback message
+                        println!("Response: {}", fallback_message);
+                        debug!("Tool call flow completed with intelligent fallback message");
+                        return Ok(fallback_message);
+                    }
+                } else {
+                    // We have a non-empty follow-up response that's not a tool call, use it
+                    self.context.add_assistant_message(&follow_up_response.content);
+                    
+                    // Log to debug but don't print to stdout
+                    debug!("Received valid follow-up response after tool execution: length={} chars, content: {}", 
+                           follow_up_response.content.len(), follow_up_response.content);
+                    
+                    info!("Received follow-up response after tool execution: length={} chars", follow_up_response.content.len());
+                    
+                    // Sleep for a longer time to ensure all outputs are properly processed
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    
+                    // Print and return the follow-up response
+                    println!("Response: {}", follow_up_response.content);
+                    debug!("Tool call flow completed successfully");
+                    return Ok(follow_up_response.content);
                 }
             }
 
@@ -280,5 +799,36 @@ impl CliApp {
 impl Default for CliApp {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// Debug helpers
+impl CliApp {
+    // Get the current conversation context size
+    pub fn debug_context_size(&self) -> usize {
+        self.context.messages.len()
+    }
+    
+    // Get the roles of the last n messages
+    pub fn debug_last_message_roles(&self, n: usize) -> String {
+        let mut roles = Vec::new();
+        
+        let start = if self.context.messages.len() > n {
+            self.context.messages.len() - n
+        } else {
+            0
+        };
+        
+        for i in start..self.context.messages.len() {
+            match self.context.messages[i].role {
+                MessageRole::User => roles.push("User"),
+                MessageRole::Assistant => roles.push("Assistant"),
+                MessageRole::Tool => roles.push("Tool"),
+                MessageRole::System => roles.push("System"),
+            }
+        }
+        
+        // Return comma-separated roles
+        roles.join(", ")
     }
 }

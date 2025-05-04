@@ -22,6 +22,8 @@ async fn main() -> Result<()> {
             use_mcp: false,
             region: Some("us-east-1".to_string()),
             streaming: true,
+            enable_tools: true,
+            require_tool_confirmation: false, // Don't require confirmation in tests
         });
     
     // Run the app with a test prompt

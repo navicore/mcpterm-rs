@@ -250,10 +250,45 @@ impl BedrockClient {
                 MessageRole::Assistant => "assistant",
                 // System messages are handled separately in Claude
                 MessageRole::System => continue,
-                // Tool results should be added as assistant messages
-                MessageRole::Tool => "assistant",
+                // Tool results require special handling for Claude
+                MessageRole::Tool => {
+                    trace!("Converting tool message to specialized assistant message: {}", message.content);
+                    
+                    // Parse the tool message if it's in JSON-RPC format
+                    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&message.content) {
+                        // First, log the raw tool result at trace level
+                        trace!("Tool result JSON: {}", serde_json::to_string_pretty(&json_value).unwrap_or_default());
+                        
+                        // Check if it has the JSON-RPC result field
+                        if let Some(result) = json_value.get("result") {
+                            // Format as a special tool result message for Claude
+                            let tool_msg = format!(
+                                "I've received the following tool result:\n```json\n{}\n```\n\nNow I need to provide a direct answer based on this result.",
+                                serde_json::to_string_pretty(result).unwrap_or_else(|_| result.to_string())
+                            );
+                            
+                            trace!("Created specialized tool result message: {}", tool_msg);
+                            
+                            let content = ClaudeContent {
+                                content_type: "text".to_string(),
+                                text: tool_msg,
+                            };
+                            
+                            claude_messages.push(ClaudeMessage {
+                                role: "assistant".to_string(),
+                                content: vec![content],
+                            });
+                            
+                            continue;
+                        }
+                    }
+                    
+                    // Fallback for non-JSON tool results
+                    "assistant"
+                },
             };
 
+            // For regular messages (or fallback for tool messages)
             let content = ClaudeContent {
                 content_type: "text".to_string(),
                 text: message.content.clone(),
@@ -398,6 +433,16 @@ impl LlmClient for BedrockClient {
             "Raw JSON request payload to Bedrock: {}",
             serde_json::to_string_pretty(&claude_payload).unwrap_or_default()
         );
+        
+        // Log the message history being sent to Claude for each role
+        for (i, msg) in claude_payload.messages.iter().enumerate() {
+            trace!(
+                "Message[{}] role={}, content={}",
+                i,
+                msg.role,
+                serde_json::to_string_pretty(&msg.content).unwrap_or_default()
+            );
+        }
 
         // Send the request to Bedrock with timing
         let output = time!("llm.response_time.bedrock", {
@@ -553,6 +598,16 @@ impl LlmClient for BedrockClient {
             "Raw streaming JSON request payload to Bedrock: {}",
             serde_json::to_string_pretty(&claude_payload).unwrap_or_default()
         );
+        
+        // Log the message history being sent to Claude for each role
+        for (i, msg) in claude_payload.messages.iter().enumerate() {
+            trace!(
+                "Streaming Message[{}] role={}, content={}",
+                i,
+                msg.role,
+                serde_json::to_string_pretty(&msg.content).unwrap_or_default()
+            );
+        }
 
         // Create a channel for the stream
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<StreamChunk>>(100);
