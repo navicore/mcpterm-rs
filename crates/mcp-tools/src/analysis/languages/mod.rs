@@ -1,7 +1,7 @@
-pub mod rust;
+pub mod common;
 pub mod js;
 pub mod python;
-pub mod common;
+pub mod rust;
 
 // Re-export public types from each language module
 pub use common::{AnalysisDetail, AnalysisType, CodeDefinition, CodeImport, CodeUsage};

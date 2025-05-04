@@ -41,17 +41,17 @@ impl RustAnalyzer {
 
         for cap in re.captures_iter(code) {
             let start_pos = cap.get(0).unwrap().start();
-            
+
             // Convert byte position to line number
             let line = line_offsets
                 .iter()
                 .take_while(|&&offset| offset < start_pos)
                 .count()
                 + 1;
-            
+
             // Extract the name
             let name = cap.name("name").map_or("", |m| m.as_str()).to_string();
-            
+
             // Extract parameters
             let params_str = cap.name("params").map_or("()", |m| m.as_str());
             let args = if detail_level > AnalysisDetail::Low {
@@ -66,14 +66,14 @@ impl RustAnalyzer {
             } else {
                 None
             };
-            
+
             // Extract return type
             let return_type = if detail_level > AnalysisDetail::Low {
                 cap.name("ret").map(|m| m.as_str().trim().to_string())
             } else {
                 None
             };
-            
+
             // Extract visibility
             let visibility = cap
                 .name("vis")
@@ -85,10 +85,10 @@ impl RustAnalyzer {
                     }
                 })
                 .or_else(|| Some("private".to_string()));
-            
+
             // Extract doc comment
             let doc_comment = cap.name("doc").map(|m| m.as_str().trim().to_string());
-            
+
             // Extract full text if detail level is high
             let full_text = if detail_level == AnalysisDetail::High {
                 // Get the matched text plus some surrounding context
@@ -96,7 +96,7 @@ impl RustAnalyzer {
             } else {
                 None
             };
-            
+
             functions.push(CodeDefinition {
                 def_type: "function".to_string(),
                 name,
@@ -114,7 +114,11 @@ impl RustAnalyzer {
     }
 
     /// Extract struct and enum definitions from Rust code
-    fn extract_data_structures(&self, code: &str, detail_level: AnalysisDetail) -> Vec<CodeDefinition> {
+    fn extract_data_structures(
+        &self,
+        code: &str,
+        detail_level: AnalysisDetail,
+    ) -> Vec<CodeDefinition> {
         let mut data_structures = Vec::new();
 
         // Regular expression for struct definitions
@@ -226,7 +230,10 @@ impl RustAnalyzer {
         let mut imports = Vec::new();
 
         // Regular expression for use statements
-        let use_re = Regex::new(r"use\s+(?P<module>[^;{]+)(?:\s*\{(?P<items>[^}]+)\})?(?:\s+as\s+(?P<alias>\w+))?\s*;").unwrap();
+        let use_re = Regex::new(
+            r"use\s+(?P<module>[^;{]+)(?:\s*\{(?P<items>[^}]+)\})?(?:\s+as\s+(?P<alias>\w+))?\s*;",
+        )
+        .unwrap();
 
         // Get line offsets for converting byte positions to line numbers
         let line_offsets: Vec<usize> = code
@@ -242,13 +249,17 @@ impl RustAnalyzer {
                 .take_while(|&&offset| offset < start_pos)
                 .count()
                 + 1;
-            
+
             let full_text = cap.get(0).unwrap().as_str().to_string();
-            
-            let module = cap.name("module").map_or("", |m| m.as_str()).trim().to_string();
-            
+
+            let module = cap
+                .name("module")
+                .map_or("", |m| m.as_str())
+                .trim()
+                .to_string();
+
             let alias = cap.name("alias").map(|m| m.as_str().trim().to_string());
-            
+
             let items = cap.name("items").map(|m| {
                 m.as_str()
                     .split(',')
@@ -284,35 +295,31 @@ impl RustAnalyzer {
         // Find usages of defined symbols
         for symbol in defined_symbols {
             // Create a simple regex to find the symbol
-            let usage_re = Regex::new(&format!(
-                r"\b{}\b",
-                regex::escape(symbol)
-            ))
-            .unwrap();
+            let usage_re = Regex::new(&format!(r"\b{}\b", regex::escape(symbol))).unwrap();
 
             for cap in usage_re.find_iter(code) {
                 let start_pos = cap.start();
                 let _end_pos = cap.end();
-                
+
                 // Convert byte position to line and column
                 let line = line_offsets
                     .iter()
                     .take_while(|&&offset| offset < start_pos)
                     .count()
                     + 1;
-                
+
                 // Calculate context range (one line of code)
                 let line_start = if line > 1 {
                     line_offsets[line - 2] + 1
                 } else {
                     0
                 };
-                
+
                 let line_end = line_offsets
                     .get(line - 1)
                     .copied()
                     .unwrap_or_else(|| code.len());
-                
+
                 let context = code[line_start..line_end].trim().to_string();
                 let column = start_pos - line_start + 1;
 
@@ -426,10 +433,10 @@ impl LanguageAnalyzer for RustAnalyzer {
 
         // Analyze the code
         let mut results = self.analyze_code(&content, analysis_type, detail_level)?;
-        
+
         // Add the file path to the results
         results.file_path = Some(file_path.to_string_lossy().to_string());
-        
+
         Ok(results)
     }
 }

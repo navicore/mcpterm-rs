@@ -140,10 +140,10 @@ pub struct AnalysisResults {
 pub trait LanguageAnalyzer {
     /// Identifies if a file is compatible with this analyzer
     fn is_compatible(&self, file_path: &Path) -> bool;
-    
+
     /// Returns the name of the language this analyzer handles
     fn language_name(&self) -> &'static str;
-    
+
     /// Analyzes code from a string
     fn analyze_code(
         &self,
@@ -151,7 +151,7 @@ pub trait LanguageAnalyzer {
         analysis_type: AnalysisType,
         detail_level: AnalysisDetail,
     ) -> Result<AnalysisResults>;
-    
+
     /// Analyzes code from a file
     fn analyze_file(
         &self,

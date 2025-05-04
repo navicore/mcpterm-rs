@@ -1,6 +1,6 @@
-pub mod project;
-pub mod languages;
 pub mod language_tool;
+pub mod languages;
+pub mod project;
 
-pub use project::{ProjectConfig, ProjectNavigator, ProjectType};
 pub use language_tool::LanguageAnalyzerTool;
+pub use project::{ProjectConfig, ProjectNavigator, ProjectType};

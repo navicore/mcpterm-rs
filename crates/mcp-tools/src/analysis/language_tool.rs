@@ -23,17 +23,20 @@ impl Default for LanguageAnalyzerTool {
 impl LanguageAnalyzerTool {
     pub fn new() -> Self {
         let mut analyzers: Vec<Arc<dyn LanguageAnalyzer + Send + Sync>> = Vec::new();
-        
+
         // Register available language analyzers
         analyzers.push(Arc::new(RustAnalyzer::new()));
         analyzers.push(Arc::new(JsAnalyzer::new()));
         analyzers.push(Arc::new(PythonAnalyzer::new()));
-        
+
         Self { analyzers }
     }
 
     /// Get the appropriate analyzer for a file
-    fn get_analyzer_for_file(&self, file_path: &Path) -> Option<Arc<dyn LanguageAnalyzer + Send + Sync>> {
+    fn get_analyzer_for_file(
+        &self,
+        file_path: &Path,
+    ) -> Option<Arc<dyn LanguageAnalyzer + Send + Sync>> {
         for analyzer in &self.analyzers {
             if analyzer.is_compatible(file_path) {
                 return Some(Arc::clone(analyzer));
@@ -43,13 +46,14 @@ impl LanguageAnalyzerTool {
     }
 
     /// Get analyzer by language name
-    fn get_analyzer_by_language(&self, language: &str) -> Option<Arc<dyn LanguageAnalyzer + Send + Sync>> {
+    fn get_analyzer_by_language(
+        &self,
+        language: &str,
+    ) -> Option<Arc<dyn LanguageAnalyzer + Send + Sync>> {
         let language_lower = language.to_lowercase();
         for analyzer in &self.analyzers {
             let analyzer_lang = analyzer.language_name().to_lowercase();
-            if analyzer_lang.contains(&language_lower)
-                || language_lower.contains(&analyzer_lang) 
-            {
+            if analyzer_lang.contains(&language_lower) || language_lower.contains(&analyzer_lang) {
                 return Some(Arc::clone(analyzer));
             }
         }
@@ -80,12 +84,12 @@ impl LanguageAnalyzerTool {
         // If we have a file path, get an analyzer for that file type
         if let Some(path_str) = file_path {
             let path = Path::new(path_str);
-            
+
             // First try to get an analyzer based on file extension
             if let Some(analyzer) = self.get_analyzer_for_file(path) {
                 return analyzer.analyze_file(path, analysis_type, detail_level);
             }
-            
+
             // If that fails and we have a language specified, try by language
             if let Some(lang) = language {
                 if let Some(analyzer) = self.get_analyzer_by_language(lang) {
@@ -93,16 +97,20 @@ impl LanguageAnalyzerTool {
                     // we'll read the file and analyze the content directly
                     if path.exists() {
                         let content = std::fs::read_to_string(path)?;
-                        let mut results = analyzer.analyze_code(&content, analysis_type, detail_level)?;
+                        let mut results =
+                            analyzer.analyze_code(&content, analysis_type, detail_level)?;
                         results.file_path = Some(path_str.to_string());
                         return Ok(results);
                     }
                 }
             }
-            
-            return Err(anyhow!("No compatible analyzer found for file: {}", path_str));
+
+            return Err(anyhow!(
+                "No compatible analyzer found for file: {}",
+                path_str
+            ));
         }
-        
+
         // If we have code but no file, we need a language specification
         if let Some(code_str) = code {
             if let Some(lang) = language {
@@ -111,9 +119,11 @@ impl LanguageAnalyzerTool {
                 }
                 return Err(anyhow!("Unsupported language: {}", lang));
             }
-            return Err(anyhow!("Language must be specified when analyzing code content"));
+            return Err(anyhow!(
+                "Language must be specified when analyzing code content"
+            ));
         }
-        
+
         Err(anyhow!("Either file_path or code content must be provided"))
     }
 }
@@ -124,7 +134,9 @@ impl Tool for LanguageAnalyzerTool {
         ToolMetadata {
             id: "code_analyzer".to_string(),
             name: "Code Analyzer".to_string(),
-            description: "Analyze code structure and relationships in various programming languages".to_string(),
+            description:
+                "Analyze code structure and relationships in various programming languages"
+                    .to_string(),
             category: ToolCategory::Search,
             input_schema: json!({
                 "type": "object",
@@ -142,7 +154,7 @@ impl Tool for LanguageAnalyzerTool {
                         "description": "Programming language of the code (required when using code content)"
                     },
                     "analysis_type": {
-                        "type": "string", 
+                        "type": "string",
                         "description": "Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)",
                         "enum": ["definitions", "imports", "usages", "datastructures", "comprehensive"],
                         "default": "comprehensive"

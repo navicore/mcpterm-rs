@@ -1,8 +1,8 @@
 use mcp_tools::analysis::languages::{
     common::{AnalysisDetail, AnalysisType, LanguageAnalyzer},
-    rust::RustAnalyzer,
     js::JsAnalyzer,
     python::PythonAnalyzer,
+    rust::RustAnalyzer,
 };
 use std::path::Path;
 
@@ -28,12 +28,16 @@ fn test() {
 "#;
 
     let result = analyzer
-        .analyze_code(rust_code, AnalysisType::Comprehensive, AnalysisDetail::Medium)
+        .analyze_code(
+            rust_code,
+            AnalysisType::Comprehensive,
+            AnalysisDetail::Medium,
+        )
         .unwrap();
 
     // Verify language detection
     assert_eq!(result.language, "Rust");
-    
+
     // Verify function detection
     let functions: Vec<_> = result
         .definitions
@@ -41,7 +45,7 @@ fn test() {
         .filter(|d| d.def_type == "function")
         .collect();
     assert!(functions.len() > 0, "Should detect at least one function");
-    
+
     // Verify struct detection
     let structs: Vec<_> = result
         .definitions
@@ -49,7 +53,7 @@ fn test() {
         .filter(|d| d.def_type == "struct")
         .collect();
     assert!(structs.len() > 0, "Should detect at least one struct");
-    
+
     // Verify function details if hello_world is found
     if let Some(hello_fn) = functions.iter().find(|d| d.name == "hello_world") {
         if let Some(vis) = &hello_fn.visibility {
@@ -59,9 +63,12 @@ fn test() {
             assert!(ret.contains("String"), "hello_world should return a String");
         }
     }
-    
+
     // Check if there are any usages
-    assert!(!result.usages.is_empty(), "Should detect at least some usages");
+    assert!(
+        !result.usages.is_empty(),
+        "Should detect at least some usages"
+    );
 }
 
 #[test]
@@ -102,7 +109,7 @@ person.sayHello();
 
     // Verify language detection
     assert_eq!(result.language, "JavaScript");
-    
+
     // Verify function detection
     let functions: Vec<_> = result
         .definitions
@@ -110,7 +117,7 @@ person.sayHello();
         .filter(|d| d.def_type == "function")
         .collect();
     assert!(functions.len() >= 1);
-    
+
     // Verify arrow function
     let arrow_functions: Vec<_> = result
         .definitions
@@ -118,7 +125,7 @@ person.sayHello();
         .filter(|d| d.def_type == "arrow_function")
         .collect();
     assert!(arrow_functions.len() >= 1);
-    
+
     // Verify class detection
     let classes: Vec<_> = result
         .definitions
@@ -126,7 +133,7 @@ person.sayHello();
         .filter(|d| d.def_type == "class")
         .collect();
     assert_eq!(classes.len(), 1);
-    
+
     // Verify method detection
     let methods: Vec<_> = result
         .definitions
@@ -167,12 +174,16 @@ print(get_current_time())
 "#;
 
     let result = analyzer
-        .analyze_code(python_code, AnalysisType::Comprehensive, AnalysisDetail::Medium)
+        .analyze_code(
+            python_code,
+            AnalysisType::Comprehensive,
+            AnalysisDetail::Medium,
+        )
         .unwrap();
 
     // Verify language detection
     assert_eq!(result.language, "Python");
-    
+
     // Verify function detection
     let functions: Vec<_> = result
         .definitions
@@ -180,7 +191,7 @@ print(get_current_time())
         .filter(|d| d.def_type == "function")
         .collect();
     assert!(functions.len() > 0, "Should detect at least one function");
-    
+
     // Verify class detection
     let classes: Vec<_> = result
         .definitions
@@ -188,7 +199,7 @@ print(get_current_time())
         .filter(|d| d.def_type == "class")
         .collect();
     assert!(classes.len() > 0, "Should detect at least one class");
-    
+
     // Verify method detection
     let methods: Vec<_> = result
         .definitions
@@ -196,9 +207,12 @@ print(get_current_time())
         .filter(|d| d.def_type.contains("method"))
         .collect();
     assert!(methods.len() > 0, "Should detect at least one method");
-    
+
     // Verify import detection
-    assert!(result.imports.len() > 0, "Should detect at least one import");
+    assert!(
+        result.imports.len() > 0,
+        "Should detect at least one import"
+    );
 }
 
 #[test]
@@ -206,12 +220,12 @@ fn test_file_extension_detection() {
     let rust_analyzer = RustAnalyzer::new();
     let js_analyzer = JsAnalyzer::new();
     let python_analyzer = PythonAnalyzer::new();
-    
+
     // Test Rust file detection
     assert!(rust_analyzer.is_compatible(Path::new("file.rs")));
     assert!(!rust_analyzer.is_compatible(Path::new("file.js")));
     assert!(!rust_analyzer.is_compatible(Path::new("file.py")));
-    
+
     // Test JS/TS file detection
     assert!(js_analyzer.is_compatible(Path::new("file.js")));
     assert!(js_analyzer.is_compatible(Path::new("file.jsx")));
@@ -219,7 +233,7 @@ fn test_file_extension_detection() {
     assert!(js_analyzer.is_compatible(Path::new("file.tsx")));
     assert!(!js_analyzer.is_compatible(Path::new("file.rs")));
     assert!(!js_analyzer.is_compatible(Path::new("file.py")));
-    
+
     // Test Python file detection
     assert!(python_analyzer.is_compatible(Path::new("file.py")));
     assert!(!python_analyzer.is_compatible(Path::new("file.rs")));
