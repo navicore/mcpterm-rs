@@ -142,9 +142,12 @@ impl CliApp {
         let find_tool = FindTool::with_config(find_config);
         tool_manager.register_tool(Box::new(find_tool));
         
-        // Register diff tool
+        // Register diff and patch tools
         let diff_tool = mcp_tools::diff::DiffTool::new();
         tool_manager.register_tool(Box::new(diff_tool));
+        
+        let patch_tool = mcp_tools::diff::PatchTool::new();
+        tool_manager.register_tool(Box::new(patch_tool));
 
         Self {
             context: ConversationContext::new(),

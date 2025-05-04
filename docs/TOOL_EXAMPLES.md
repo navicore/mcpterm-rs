@@ -136,6 +136,108 @@ Example response:
 }
 ```
 
+## Diff and Patch Tools
+
+### Comparing Files or Text
+
+The `diff` tool allows you to compare files or text content and generate differences in various formats.
+
+#### Example 1: Compare two files
+
+```json
+{
+  "tool": "diff",
+  "params": {
+    "old_file": "/path/to/original.txt",
+    "new_file": "/path/to/modified.txt",
+    "output_format": "unified",
+    "context_lines": 3
+  }
+}
+```
+
+#### Example 2: Compare text content
+
+```json
+{
+  "tool": "diff",
+  "params": {
+    "old_content": "This is the original text.\nIt has multiple lines.\nSome content here.",
+    "new_content": "This is the original text.\nIt has been modified.\nSome content here.",
+    "output_format": "inline",
+    "ignore_whitespace": true
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "tool_id": "diff",
+  "status": "success",
+  "result": {
+    "diff": "@@ -1,3 +1,3 @@\n This is the original text.\n-It has multiple lines.\n+It has been modified.\n Some content here.",
+    "stats": {
+      "inserted": 1,
+      "deleted": 1,
+      "unchanged": 2
+    },
+    "files_compared": [
+      "/path/to/original.txt",
+      "/path/to/modified.txt"
+    ]
+  }
+}
+```
+
+### Applying Patches
+
+The `patch` tool allows you to apply patches in unified diff format to files.
+
+#### Example 1: Apply a patch to a file
+
+```json
+{
+  "tool": "patch",
+  "params": {
+    "target_file": "/path/to/file.txt",
+    "patch_content": "@@ -1,3 +1,3 @@\n Line 1\n-Line 2\n+Modified Line 2\n Line 3",
+    "create_backup": true
+  }
+}
+```
+
+#### Example 2: Dry run to test a patch
+
+```json
+{
+  "tool": "patch",
+  "params": {
+    "target_file": "/path/to/file.txt",
+    "patch_content": "@@ -1,3 +1,3 @@\n Line 1\n-Line 2\n+Modified Line 2\n Line 3",
+    "dry_run": true
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "tool_id": "patch",
+  "status": "success",
+  "result": {
+    "success": true,
+    "target_file": "/path/to/file.txt",
+    "backup_created": "/path/to/file.txt.bak",
+    "hunks_applied": 1,
+    "hunks_failed": 0,
+    "conflicts": []
+  }
+}
+```
+
 ## Safety Considerations
 
 ### Path Safety
@@ -189,3 +291,7 @@ or
 3. Handle large files appropriately (check size before reading)
 4. Use appropriate timeouts for long-running commands
 5. Consider user experience when asking for confirmation
+6. When using diff and patch tools:
+   - Always create backups when patching important files
+   - Use dry run mode to test patches before applying them
+   - Be aware that patches may fail if the context doesn't match
