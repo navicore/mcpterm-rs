@@ -350,9 +350,9 @@ impl BedrockClient {
                             // Otherwise stringify it, preserving formatting
                             result.to_string()
                         };
-                        
+
                         trace!("Extracted result content from MCP response: {}", content);
-                        
+
                         Ok(LlmResponse {
                             id: response.id.clone(),
                             content,
