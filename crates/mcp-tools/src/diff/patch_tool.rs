@@ -275,9 +275,7 @@ impl PatchTool {
 
             // Verify context - all ' ' lines should match the original
             for hunk_line in &hunk.lines {
-                if hunk_line.starts_with(' ') {
-                    let context_line = &hunk_line[1..]; // Remove the ' ' prefix
-
+                if let Some(context_line) = hunk_line.strip_prefix(' ') {
                     if context_idx + current_line_idx >= original_lines.len()
                         || original_lines[context_idx + current_line_idx] != context_line
                     {
@@ -286,10 +284,10 @@ impl PatchTool {
                     }
 
                     context_idx += 1;
-                } else if hunk_line.starts_with('-') {
+                    //} else if hunk_line.starts_with('-') {
                     // Check that deletion lines match
-                    let deletion_line = &hunk_line[1..]; // Remove the '-' prefix
-
+                    //    let deletion_line = &hunk_line[1..]; // Remove the '-' prefix
+                } else if let Some(deletion_line) = hunk_line.strip_prefix('-') {
                     if context_idx + current_line_idx >= original_lines.len()
                         || original_lines[context_idx + current_line_idx] != deletion_line
                     {
@@ -305,14 +303,11 @@ impl PatchTool {
                 // Apply the hunk
                 let mut line_offset = 0;
                 for hunk_line in &hunk.lines {
-                    if hunk_line.starts_with(' ') {
-                        // Unchanged line
-                        let content = &hunk_line[1..]; // Remove the ' ' prefix
+                    if let Some(content) = hunk_line.strip_prefix(' ') {
                         new_lines.push(content.to_string());
                         line_offset += 1;
-                    } else if hunk_line.starts_with('+') {
+                    } else if let Some(content) = hunk_line.strip_prefix('+') {
                         // Added line
-                        let content = &hunk_line[1..]; // Remove the '+' prefix
                         new_lines.push(content.to_string());
                     } else if hunk_line.starts_with('-') {
                         // Removed line - skip it
