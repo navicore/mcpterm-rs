@@ -189,22 +189,22 @@ impl DiffTool {
         let mut hunk_new_count: usize = 0;
         let mut in_hunk = false;
         let mut context_buffer = Vec::new();
-        
+
         // Process each change
         for change in diff.iter_all_changes() {
             let tag = change.tag();
             let value = change.value();
-            
+
             match tag {
                 ChangeTag::Delete => {
                     old_line_num += 1;
                     stats.deleted += 1;
-                    
+
                     // Start a new hunk if needed
                     if !in_hunk {
                         hunk_old_start = old_line_num.saturating_sub(context_lines);
                         hunk_new_start = new_line_num.saturating_sub(context_lines);
-                        
+
                         // Add context lines from buffer
                         for (i, line) in context_buffer.iter().enumerate() {
                             let ctx_old_num = old_line_num - context_buffer.len() + i;
@@ -215,23 +215,23 @@ impl DiffTool {
                                 hunk_new_count += 1;
                             }
                         }
-                        
+
                         in_hunk = true;
                         context_buffer.clear();
                     }
-                    
+
                     current_hunk_lines.push(format!("-{}", value));
                     hunk_old_count += 1;
-                },
+                }
                 ChangeTag::Insert => {
                     new_line_num += 1;
                     stats.inserted += 1;
-                    
+
                     // Start a new hunk if needed
                     if !in_hunk {
                         hunk_old_start = old_line_num.saturating_sub(context_lines);
                         hunk_new_start = new_line_num.saturating_sub(context_lines);
-                        
+
                         // Add context lines from buffer
                         for (i, line) in context_buffer.iter().enumerate() {
                             let ctx_old_num = old_line_num - context_buffer.len() + i;
@@ -242,53 +242,53 @@ impl DiffTool {
                                 hunk_new_count += 1;
                             }
                         }
-                        
+
                         in_hunk = true;
                         context_buffer.clear();
                     }
-                    
+
                     current_hunk_lines.push(format!("+{}", value));
                     hunk_new_count += 1;
-                },
+                }
                 ChangeTag::Equal => {
                     old_line_num += 1;
                     new_line_num += 1;
                     stats.unchanged += 1;
-                    
+
                     // Add to context buffer
                     context_buffer.push(value.to_string());
                     if context_buffer.len() > context_lines * 2 {
                         context_buffer.remove(0);
                     }
-                    
+
                     if in_hunk {
                         // Add to current hunk if we're in one
                         current_hunk_lines.push(format!(" {}", value));
                         hunk_old_count += 1;
                         hunk_new_count += 1;
-                        
+
                         // Check if we've had enough unchanged lines to end the hunk
-                        let unchanged_streak = current_hunk_lines.iter()
+                        let unchanged_streak = current_hunk_lines
+                            .iter()
                             .rev()
                             .take(context_lines)
                             .filter(|l| l.starts_with(' '))
                             .count();
-                            
+
                         if unchanged_streak >= context_lines {
                             // Finish the hunk
                             current_hunk_header = format!(
                                 "@@ -{},{} +{},{} @@",
-                                hunk_old_start, hunk_old_count,
-                                hunk_new_start, hunk_new_count
+                                hunk_old_start, hunk_old_count, hunk_new_start, hunk_new_count
                             );
-                            
+
                             output.push_str(&current_hunk_header);
                             output.push('\n');
                             for line in &current_hunk_lines {
                                 output.push_str(line);
                                 output.push('\n');
                             }
-                            
+
                             // Reset hunk tracking
                             current_hunk_lines.clear();
                             in_hunk = false;
@@ -299,15 +299,14 @@ impl DiffTool {
                 }
             }
         }
-        
+
         // Handle any remaining hunk
         if in_hunk && !current_hunk_lines.is_empty() {
             current_hunk_header = format!(
                 "@@ -{},{} +{},{} @@",
-                hunk_old_start, hunk_old_count,
-                hunk_new_start, hunk_new_count
+                hunk_old_start, hunk_old_count, hunk_new_start, hunk_new_count
             );
-            
+
             output.push_str(&current_hunk_header);
             output.push('\n');
             for line in &current_hunk_lines {
@@ -315,18 +314,18 @@ impl DiffTool {
                 output.push('\n');
             }
         }
-        
+
         // Compute modified count (lines that are both deleted and inserted)
         // This is a simplistic approach; for a perfect count we'd need to do more analysis
         stats.modified = std::cmp::min(stats.deleted, stats.inserted);
-        
+
         (output, stats)
     }
-    
+
     // Generate inline/side-by-side diff format
     fn format_inline_diff<'a>(
         &self,
-        diff: &'a TextDiff<'a, 'a, 'a, str>
+        diff: &'a TextDiff<'a, 'a, 'a, str>,
     ) -> (Vec<DiffLine>, DiffStats) {
         let mut lines = Vec::new();
         let mut stats = DiffStats {
@@ -335,14 +334,14 @@ impl DiffTool {
             modified: 0,
             unchanged: 0,
         };
-        
+
         let mut old_line_num: usize = 0;
         let mut new_line_num: usize = 0;
-        
+
         for change in diff.iter_all_changes() {
             let tag = change.tag();
             let value = change.value();
-            
+
             match tag {
                 ChangeTag::Delete => {
                     old_line_num += 1;
@@ -353,7 +352,7 @@ impl DiffTool {
                         change_type: "delete".to_string(),
                         content: value.to_string(),
                     });
-                },
+                }
                 ChangeTag::Insert => {
                     new_line_num += 1;
                     stats.inserted += 1;
@@ -363,7 +362,7 @@ impl DiffTool {
                         change_type: "insert".to_string(),
                         content: value.to_string(),
                     });
-                },
+                }
                 ChangeTag::Equal => {
                     old_line_num += 1;
                     new_line_num += 1;
@@ -377,17 +376,17 @@ impl DiffTool {
                 }
             }
         }
-        
+
         // Compute modified count
         stats.modified = std::cmp::min(stats.deleted, stats.inserted);
-        
+
         (lines, stats)
     }
-    
+
     // Generate changes-only diff format (just the lines that changed)
     fn format_changes_diff<'a>(
         &self,
-        diff: &'a TextDiff<'a, 'a, 'a, str>
+        diff: &'a TextDiff<'a, 'a, 'a, str>,
     ) -> (Vec<DiffLine>, DiffStats) {
         let mut lines = Vec::new();
         let mut stats = DiffStats {
@@ -396,14 +395,14 @@ impl DiffTool {
             modified: 0,
             unchanged: 0,
         };
-        
+
         let mut old_line_num: usize = 0;
         let mut new_line_num: usize = 0;
-        
+
         for change in diff.iter_all_changes() {
             let tag = change.tag();
             let value = change.value();
-            
+
             match tag {
                 ChangeTag::Delete => {
                     old_line_num += 1;
@@ -414,7 +413,7 @@ impl DiffTool {
                         change_type: "delete".to_string(),
                         content: value.to_string(),
                     });
-                },
+                }
                 ChangeTag::Insert => {
                     new_line_num += 1;
                     stats.inserted += 1;
@@ -424,7 +423,7 @@ impl DiffTool {
                         change_type: "insert".to_string(),
                         content: value.to_string(),
                     });
-                },
+                }
                 ChangeTag::Equal => {
                     old_line_num += 1;
                     new_line_num += 1;
@@ -433,10 +432,10 @@ impl DiffTool {
                 }
             }
         }
-        
+
         // Compute modified count
         stats.modified = std::cmp::min(stats.deleted, stats.inserted);
-        
+
         (lines, stats)
     }
 }
@@ -548,7 +547,7 @@ impl Tool for DiffTool {
         let new_content = params["new_content"].as_str();
         let old_file = params["old_file"].as_str();
         let new_file = params["new_file"].as_str();
-        
+
         // Ensure we have either content or file paths
         if old_content.is_none() && old_file.is_none() {
             return Ok(ToolResult {
@@ -560,7 +559,7 @@ impl Tool for DiffTool {
                 error: Some("You must provide either 'old_content' or 'old_file'".to_string()),
             });
         }
-        
+
         if new_content.is_none() && new_file.is_none() {
             return Ok(ToolResult {
                 tool_id: "diff".to_string(),
@@ -571,26 +570,25 @@ impl Tool for DiffTool {
                 error: Some("You must provide either 'new_content' or 'new_file'".to_string()),
             });
         }
-        
+
         // Get additional parameters
         let context_lines = params["context_lines"]
             .as_u64()
-            .unwrap_or(self.config.default_context_lines as u64) as usize;
-            
-        let ignore_whitespace = params["ignore_whitespace"]
-            .as_bool()
-            .unwrap_or(false);
-            
+            .unwrap_or(self.config.default_context_lines as u64)
+            as usize;
+
+        let ignore_whitespace = params["ignore_whitespace"].as_bool().unwrap_or(false);
+
         let output_format = params["output_format"]
             .as_str()
             .map(DiffFormat::from)
             .unwrap_or(DiffFormat::Unified);
-            
+
         // Prepare the content strings and track file paths for output
         let mut old_content_str = String::new();
         let mut new_content_str = String::new();
         let mut files_compared = Vec::new();
-        
+
         // Get old content
         if let Some(content) = old_content {
             old_content_str = content.to_string();
@@ -603,12 +601,14 @@ impl Tool for DiffTool {
                     output: json!({
                         "error": "Access to this path is not allowed for security reasons"
                     }),
-                    error: Some("Access to this path is not allowed for security reasons".to_string()),
+                    error: Some(
+                        "Access to this path is not allowed for security reasons".to_string(),
+                    ),
                 });
             }
-            
+
             let file_path = PathBuf::from(path);
-            
+
             // Validate path exists
             if !file_path.exists() {
                 return Ok(ToolResult {
@@ -620,13 +620,13 @@ impl Tool for DiffTool {
                     error: Some(format!("File does not exist: {}", path)),
                 });
             }
-            
+
             // Read file
             match self.read_file(&file_path) {
                 Ok(content) => {
                     old_content_str = content;
                     files_compared.push(path.to_string());
-                },
+                }
                 Err(e) => {
                     return Ok(ToolResult {
                         tool_id: "diff".to_string(),
@@ -639,7 +639,7 @@ impl Tool for DiffTool {
                 }
             }
         }
-        
+
         // Get new content
         if let Some(content) = new_content {
             new_content_str = content.to_string();
@@ -652,12 +652,14 @@ impl Tool for DiffTool {
                     output: json!({
                         "error": "Access to this path is not allowed for security reasons"
                     }),
-                    error: Some("Access to this path is not allowed for security reasons".to_string()),
+                    error: Some(
+                        "Access to this path is not allowed for security reasons".to_string(),
+                    ),
                 });
             }
-            
+
             let file_path = PathBuf::from(path);
-            
+
             // Validate path exists
             if !file_path.exists() {
                 return Ok(ToolResult {
@@ -669,13 +671,13 @@ impl Tool for DiffTool {
                     error: Some(format!("File does not exist: {}", path)),
                 });
             }
-            
+
             // Read file
             match self.read_file(&file_path) {
                 Ok(content) => {
                     new_content_str = content;
                     files_compared.push(path.to_string());
-                },
+                }
                 Err(e) => {
                     return Ok(ToolResult {
                         tool_id: "diff".to_string(),
@@ -688,39 +690,39 @@ impl Tool for DiffTool {
                 }
             }
         }
-        
+
         // Handle whitespace normalization if requested
         if ignore_whitespace {
             old_content_str = normalize_whitespace(&old_content_str);
             new_content_str = normalize_whitespace(&new_content_str);
         }
-        
+
         // Create the diff
         let diff = TextDiff::from_lines(&old_content_str, &new_content_str);
-        
+
         // Format according to requested output format
         let (diff_output, stats) = match output_format {
             DiffFormat::Unified => {
                 let (text, stats) = self.format_unified_diff(&diff, context_lines);
                 (json!(text), stats)
-            },
+            }
             DiffFormat::Inline => {
                 let (lines, stats) = self.format_inline_diff(&diff);
                 (json!(lines), stats)
-            },
+            }
             DiffFormat::Changes => {
                 let (lines, stats) = self.format_changes_diff(&diff);
-                
+
                 // Debug output to help diagnose test failures
                 info!("Changes-only diff format produced {} lines", lines.len());
                 for line in &lines {
                     info!("Line: type={}, content={}", line.change_type, line.content);
                 }
-                
+
                 (json!(lines), stats)
             }
         };
-        
+
         // Return results
         Ok(ToolResult {
             tool_id: "diff".to_string(),
@@ -745,7 +747,7 @@ fn normalize_whitespace(text: &str) -> String {
     // First, replace all whitespace sequences with a single space
     let mut result = String::with_capacity(text.len());
     let mut last_was_space = false;
-    
+
     for c in text.chars() {
         if c.is_whitespace() {
             if !last_was_space {
@@ -757,16 +759,17 @@ fn normalize_whitespace(text: &str) -> String {
             last_was_space = false;
         }
     }
-    
+
     // Then, remove whitespace around braces and parentheses
-    let result = result.replace(" {", "{")
-                       .replace("{ ", "{")
-                       .replace(" }", "}")
-                       .replace("} ", "}")
-                       .replace(" (", "(")
-                       .replace("( ", "(")
-                       .replace(" )", ")")
-                       .replace(") ", ")");
-    
+    let result = result
+        .replace(" {", "{")
+        .replace("{ ", "{")
+        .replace(" }", "}")
+        .replace("} ", "}")
+        .replace(" (", "(")
+        .replace("( ", "(")
+        .replace(" )", ")")
+        .replace(") ", ")");
+
     result
 }

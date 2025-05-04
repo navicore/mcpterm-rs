@@ -2,5 +2,5 @@
 mod diff_tool;
 mod patch_tool;
 
-pub use diff_tool::{DiffTool, DiffConfig, DiffFormat};
-pub use patch_tool::{PatchTool, PatchConfig};
+pub use diff_tool::{DiffConfig, DiffFormat, DiffTool};
+pub use patch_tool::{PatchConfig, PatchTool};

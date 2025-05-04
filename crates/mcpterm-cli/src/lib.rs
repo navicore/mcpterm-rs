@@ -148,6 +148,10 @@ impl CliApp {
         
         let patch_tool = mcp_tools::diff::PatchTool::new();
         tool_manager.register_tool(Box::new(patch_tool));
+        
+        // Register project navigator tool
+        let project_navigator = mcp_tools::analysis::ProjectNavigator::new();
+        tool_manager.register_tool(Box::new(project_navigator));
 
         Self {
             context: ConversationContext::new(),

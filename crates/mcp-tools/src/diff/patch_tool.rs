@@ -145,10 +145,10 @@ impl PatchTool {
     fn parse_diff(&self, patch_content: &str) -> Result<Vec<DiffHunk>> {
         let mut hunks = Vec::new();
         let mut current_hunk: Option<DiffHunk> = None;
-        
+
         // Split the diff by lines
         let lines: Vec<&str> = patch_content.lines().collect();
-        
+
         for line in lines {
             // Check for hunk header like "@@ -1,5 +1,5 @@"
             if line.starts_with("@@") && line.contains("@@") {
@@ -156,21 +156,21 @@ impl PatchTool {
                 if let Some(hunk) = current_hunk.take() {
                     hunks.push(hunk);
                 }
-                
+
                 // Parse the hunk header
                 let header = line.trim_matches('@').trim();
                 let parts: Vec<&str> = header.split(' ').collect();
-                
+
                 if parts.len() < 2 {
                     return Err(anyhow!("Invalid hunk header format: {}", line));
                 }
-                
+
                 let old_range = parts[0].trim_start_matches('-');
                 let new_range = parts[1].trim_start_matches('+');
-                
+
                 let (old_start, old_count) = Self::parse_range(old_range)?;
                 let (new_start, new_count) = Self::parse_range(new_range)?;
-                
+
                 current_hunk = Some(DiffHunk {
                     old_start,
                     old_count,
@@ -190,40 +190,45 @@ impl PatchTool {
                 }
             }
         }
-        
+
         // Add the last hunk if any
         if let Some(hunk) = current_hunk {
             hunks.push(hunk);
         }
-        
+
         // Ensure we found at least one hunk
         if hunks.is_empty() {
             return Err(anyhow!("No valid hunks found in the patch"));
         }
-        
+
         Ok(hunks)
     }
-    
+
     // Parse a range like "1,5" into (start, count)
     fn parse_range(range: &str) -> Result<(usize, usize)> {
         let parts: Vec<&str> = range.split(',').collect();
-        
+
         if parts.len() != 2 {
             return Err(anyhow!("Invalid range format: {}", range));
         }
-        
+
         let start = parts[0].parse::<usize>()?;
         let count = parts[1].parse::<usize>()?;
-        
+
         Ok((start, count))
     }
-    
+
     // Apply a patch to a file
-    fn apply_patch(&self, file_path: &Path, hunks: &[DiffHunk], dry_run: bool) -> Result<PatchResult> {
+    fn apply_patch(
+        &self,
+        file_path: &Path,
+        hunks: &[DiffHunk],
+        dry_run: bool,
+    ) -> Result<PatchResult> {
         // Read the original file
         let original_content = fs::read_to_string(file_path)?;
         let original_lines: Vec<&str> = original_content.lines().collect();
-        
+
         // Create a result with file path
         let file_str = file_path.to_string_lossy().to_string();
         let mut result = PatchResult {
@@ -234,27 +239,27 @@ impl PatchTool {
             hunks_failed: 0,
             conflicts: Vec::new(),
         };
-        
+
         // Apply hunks to build the new content
         let mut new_lines = Vec::new();
         let mut current_line_idx = 0;
-        
+
         for (hunk_idx, hunk) in hunks.iter().enumerate() {
             // Add the lines before the hunk
             let old_start_idx = hunk.old_start - 1; // Convert to 0-indexed
-            
+
             // Validate that we haven't overshot
             if old_start_idx > original_lines.len() {
                 // This hunk tries to change lines beyond the file's end
                 result.success = false;
                 result.hunks_failed += 1;
                 result.conflicts.push(format!(
-                    "Hunk #{} failed: attempts to modify lines beyond the end of the file", 
+                    "Hunk #{} failed: attempts to modify lines beyond the end of the file",
                     hunk_idx + 1
                 ));
                 continue;
             }
-            
+
             // Add lines before the hunk
             while current_line_idx < old_start_idx {
                 if current_line_idx < original_lines.len() {
@@ -262,37 +267,39 @@ impl PatchTool {
                 }
                 current_line_idx += 1;
             }
-            
+
             // Apply the hunk - first ensure the context matches
             let mut can_apply = true;
             let mut context_idx = 0;
-            
+
             // Verify context - all ' ' lines should match the original
             for hunk_line in &hunk.lines {
                 if hunk_line.starts_with(' ') {
                     let context_line = &hunk_line[1..]; // Remove the ' ' prefix
-                    
-                    if context_idx + current_line_idx >= original_lines.len() ||
-                       original_lines[context_idx + current_line_idx] != context_line {
+
+                    if context_idx + current_line_idx >= original_lines.len()
+                        || original_lines[context_idx + current_line_idx] != context_line
+                    {
                         can_apply = false;
                         break;
                     }
-                    
+
                     context_idx += 1;
                 } else if hunk_line.starts_with('-') {
                     // Check that deletion lines match
                     let deletion_line = &hunk_line[1..]; // Remove the '-' prefix
-                    
-                    if context_idx + current_line_idx >= original_lines.len() ||
-                       original_lines[context_idx + current_line_idx] != deletion_line {
+
+                    if context_idx + current_line_idx >= original_lines.len()
+                        || original_lines[context_idx + current_line_idx] != deletion_line
+                    {
                         can_apply = false;
                         break;
                     }
-                    
+
                     context_idx += 1;
                 }
             }
-            
+
             if can_apply {
                 // Apply the hunk
                 let mut line_offset = 0;
@@ -313,7 +320,7 @@ impl PatchTool {
                 }
                 // Update the current_line_idx after processing the entire hunk
                 current_line_idx += line_offset;
-                
+
                 result.hunks_applied += 1;
             } else {
                 // Can't apply this hunk - add the original lines and mark as failed
@@ -323,44 +330,44 @@ impl PatchTool {
                         new_lines.push(original_lines[current_line_idx + i].to_string());
                     }
                 }
-                
+
                 current_line_idx += hunk_lines;
                 result.hunks_failed += 1;
                 result.conflicts.push(format!(
-                    "Hunk #{} failed: the file content doesn't match the patch context", 
+                    "Hunk #{} failed: the file content doesn't match the patch context",
                     hunk_idx + 1
                 ));
                 result.success = false;
             }
         }
-        
+
         // Add any remaining lines
         while current_line_idx < original_lines.len() {
             new_lines.push(original_lines[current_line_idx].to_string());
             current_line_idx += 1;
         }
-        
+
         // If this is a dry run, just return the result
         if dry_run {
             return Ok(result);
         }
-        
+
         // Create backup if needed and it's not a dry run
         if self.config.create_backup {
             let backup_path = self.create_backup(file_path)?;
             result.backup_created = Some(backup_path.to_string_lossy().to_string());
         }
-        
+
         // Write the new content to the file if not a dry run
         let new_content = new_lines.join("\n");
         let mut file = fs::File::create(file_path)?;
         file.write_all(new_content.as_bytes())?;
-        
+
         // Add a newline at the end if the original had one
         if original_content.ends_with('\n') && !new_content.ends_with('\n') {
             file.write_all(b"\n")?;
         }
-        
+
         Ok(result)
     }
 }
@@ -442,19 +449,17 @@ impl Tool for PatchTool {
         let target_file = params["target_file"]
             .as_str()
             .ok_or_else(|| anyhow!("Missing required parameter: 'target_file'"))?;
-            
+
         let patch_content = params["patch_content"]
             .as_str()
             .ok_or_else(|| anyhow!("Missing required parameter: 'patch_content'"))?;
-            
+
         let create_backup = params["create_backup"]
             .as_bool()
             .unwrap_or(self.config.create_backup);
-            
-        let dry_run = params["dry_run"]
-            .as_bool()
-            .unwrap_or(false);
-            
+
+        let dry_run = params["dry_run"].as_bool().unwrap_or(false);
+
         // Check if the target file path is allowed
         if !self.is_path_allowed(target_file) {
             return Ok(ToolResult {
@@ -466,7 +471,7 @@ impl Tool for PatchTool {
                 error: Some("Access to this path is not allowed for security reasons".to_string()),
             });
         }
-        
+
         // Check if the target file exists
         let file_path = PathBuf::from(target_file);
         if !file_path.exists() {
@@ -479,7 +484,7 @@ impl Tool for PatchTool {
                 error: Some(format!("Target file does not exist: {}", target_file)),
             });
         }
-        
+
         // Check file size
         let metadata = fs::metadata(&file_path)?;
         if metadata.len() as usize > self.config.max_file_size {
@@ -489,10 +494,13 @@ impl Tool for PatchTool {
                 output: json!({
                     "error": format!("File is too large to patch (max size: {} bytes)", self.config.max_file_size)
                 }),
-                error: Some(format!("File is too large to patch (max size: {} bytes)", self.config.max_file_size)),
+                error: Some(format!(
+                    "File is too large to patch (max size: {} bytes)",
+                    self.config.max_file_size
+                )),
             });
         }
-        
+
         // Parse the diff
         let hunks = match self.parse_diff(patch_content) {
             Ok(hunks) => hunks,
@@ -507,11 +515,11 @@ impl Tool for PatchTool {
                 });
             }
         };
-        
+
         // Apply the patch with the current backup setting
         let mut local_config = self.config.clone();
         local_config.create_backup = create_backup;
-        
+
         let patch_result = match self.apply_patch(&file_path, &hunks, dry_run) {
             Ok(result) => result,
             Err(e) => {
@@ -525,14 +533,14 @@ impl Tool for PatchTool {
                 });
             }
         };
-        
+
         // Return the result
         let status = if patch_result.success {
             ToolStatus::Success
         } else {
             ToolStatus::Failure
         };
-        
+
         Ok(ToolResult {
             tool_id: "patch".to_string(),
             status,

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+pub mod analysis;
 pub mod diff;
 pub mod filesystem;
 pub mod registry;
@@ -79,28 +80,30 @@ impl ToolManager {
             })
         }
     }
-    
+
     /// Get a list of all registered tools
     pub fn get_tools(&self) -> Vec<ToolMetadata> {
-        self.tools
-            .values()
-            .map(|tool| tool.metadata())
-            .collect()
+        self.tools.values().map(|tool| tool.metadata()).collect()
     }
-    
+
     /// Generate documentation for all registered tools
     pub fn generate_tool_documentation(&self) -> String {
         let mut doc = String::from("Available tools:\n\n");
-        
+
         for (i, tool) in self.tools.values().enumerate() {
             let metadata = tool.metadata();
-            
+
             // Add tool name and description
-            doc.push_str(&format!("{}. \"{}\": {}\n", i + 1, metadata.id, metadata.description));
-            
+            doc.push_str(&format!(
+                "{}. \"{}\": {}\n",
+                i + 1,
+                metadata.id,
+                metadata.description
+            ));
+
             // Add parameters documentation
             doc.push_str("   Parameters: {\n");
-            
+
             // Extract parameter information from the schema
             if let Some(props) = metadata.input_schema.get("properties") {
                 if let Some(props_obj) = props.as_object() {
@@ -109,19 +112,19 @@ impl ToolManager {
                             .get("type")
                             .and_then(|t| t.as_str())
                             .unwrap_or("any");
-                            
+
                         let description = param_schema
                             .get("description")
                             .and_then(|d| d.as_str())
                             .unwrap_or("");
-                            
+
                         let required = metadata
                             .input_schema
                             .get("required")
                             .and_then(|r| r.as_array())
                             .map(|arr| arr.iter().any(|v| v.as_str() == Some(param_name)))
                             .unwrap_or(false);
-                            
+
                         if required {
                             doc.push_str(&format!("     \"{}\": \"{}\"", param_name, param_type));
                             if !description.is_empty() {
@@ -136,10 +139,10 @@ impl ToolManager {
                     }
                 }
             }
-            
+
             doc.push_str("   }\n\n");
         }
-        
+
         doc
     }
 }
@@ -160,18 +163,18 @@ mod tests {
         let manager = ToolManager::new();
         assert_eq!(manager.tools.len(), 0);
     }
-    
+
     // A simple mock tool for testing
     struct MockTool {
         metadata: ToolMetadata,
     }
-    
+
     #[async_trait]
     impl Tool for MockTool {
         fn metadata(&self) -> ToolMetadata {
             self.metadata.clone()
         }
-        
+
         async fn execute(&self, _params: Value) -> Result<ToolResult> {
             Ok(ToolResult {
                 tool_id: self.metadata.id.clone(),
@@ -181,11 +184,11 @@ mod tests {
             })
         }
     }
-    
+
     #[test]
     fn test_generate_tool_documentation() {
         let mut manager = ToolManager::new();
-        
+
         // Create and register a mock tool
         let mock_tool = MockTool {
             metadata: ToolMetadata {
@@ -217,12 +220,12 @@ mod tests {
                 }),
             },
         };
-        
+
         manager.register_tool(Box::new(mock_tool));
-        
+
         // Generate documentation
         let docs = manager.generate_tool_documentation();
-        
+
         // Verify the documentation contains expected elements
         assert!(docs.contains("\"mock_tool\""));
         assert!(docs.contains("A mock tool for testing"));
@@ -231,11 +234,11 @@ mod tests {
         assert!(docs.contains("A required parameter"));
         assert!(docs.contains("Optional: An optional parameter"));
     }
-    
+
     #[test]
     fn test_generate_tool_documentation_multiple_tools() {
         let mut manager = ToolManager::new();
-        
+
         // Create and register two mock tools
         let tool1 = MockTool {
             metadata: ToolMetadata {
@@ -256,7 +259,7 @@ mod tests {
                 output_schema: json!({}),
             },
         };
-        
+
         let tool2 = MockTool {
             metadata: ToolMetadata {
                 id: "tool2".to_string(),
@@ -276,25 +279,25 @@ mod tests {
                 output_schema: json!({}),
             },
         };
-        
+
         manager.register_tool(Box::new(tool1));
         manager.register_tool(Box::new(tool2));
-        
+
         // Generate documentation
         let docs = manager.generate_tool_documentation();
-        
+
         // Verify the documentation contains both tools
         assert!(docs.contains("\"tool1\""));
         assert!(docs.contains("First mock tool"));
         assert!(docs.contains("\"param1\": \"string\""));
-        
+
         assert!(docs.contains("\"tool2\""));
         assert!(docs.contains("Second mock tool"));
         assert!(docs.contains("\"param2\": \"boolean\""));
         assert!(docs.contains("Optional: Parameter 2"));
-        
+
         // Should have numbered the tools
-        assert!(docs.contains("1. \"tool"));  // Either tool could be first
-        assert!(docs.contains("2. \"tool"));  // And the other would be second
+        assert!(docs.contains("1. \"tool")); // Either tool could be first
+        assert!(docs.contains("2. \"tool")); // And the other would be second
     }
 }

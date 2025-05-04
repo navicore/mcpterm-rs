@@ -238,6 +238,112 @@ Example response:
 }
 ```
 
+## Project Navigation Tool
+
+The `project` tool analyzes project structure, type, dependencies, and entry points to help you understand codebases more easily.
+
+### Example 1: Basic project analysis
+
+```json
+{
+  "tool": "project",
+  "params": {
+    "project_dir": "/path/to/project",
+    "include_hidden": false,
+    "analyze_dependencies": true
+  }
+}
+```
+
+### Example 2: Deep project analysis with hidden files
+
+```json
+{
+  "tool": "project",
+  "params": {
+    "project_dir": "/path/to/project",
+    "include_hidden": true,
+    "analyze_dependencies": true,
+    "max_depth": 10
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "tool_id": "project",
+  "status": "success",
+  "result": {
+    "project_type": "Rust",
+    "structure": {
+      "path": "project",
+      "is_dir": true,
+      "size": 0,
+      "children": [
+        {
+          "path": "Cargo.toml",
+          "is_dir": false,
+          "size": 245,
+          "file_type": "config"
+        },
+        {
+          "path": "src",
+          "is_dir": true,
+          "size": 0,
+          "file_type": "source",
+          "children": [
+            {
+              "path": "src/main.rs",
+              "is_dir": false,
+              "size": 45,
+              "file_type": "source"
+            },
+            {
+              "path": "src/lib.rs",
+              "is_dir": false,
+              "size": 120,
+              "file_type": "source"
+            }
+          ]
+        }
+      ],
+      "file_type": "project-root"
+    },
+    "directories": {
+      "src": "Source code directory",
+      "tests": "Tests directory",
+      "examples": "Example code"
+    },
+    "entry_points": [
+      {
+        "path": "src/main.rs",
+        "entry_type": "main",
+        "description": "Main executable entry point"
+      },
+      {
+        "path": "src/lib.rs",
+        "entry_type": "library",
+        "description": "Library crate entry point"
+      }
+    ],
+    "dependencies": [
+      {
+        "name": "serde",
+        "version": "1.0",
+        "is_dev": false
+      },
+      {
+        "name": "tokio",
+        "version": "1",
+        "is_dev": false
+      }
+    ]
+  }
+}
+```
+
 ## Safety Considerations
 
 ### Path Safety

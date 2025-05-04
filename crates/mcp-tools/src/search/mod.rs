@@ -1,6 +1,6 @@
 // Search tools for files and content
-pub mod grep;
 pub mod find;
+pub mod grep;
 
-pub use grep::{GrepTool, GrepConfig};
-pub use find::{FindTool, FindConfig};
+pub use find::{FindConfig, FindTool};
+pub use grep::{GrepConfig, GrepTool};

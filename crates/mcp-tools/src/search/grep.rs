@@ -201,7 +201,8 @@ impl Tool for GrepTool {
         ToolMetadata {
             id: "grep".to_string(),
             name: "Grep".to_string(),
-            description: "Search for patterns in file contents using regular expressions".to_string(),
+            description: "Search for patterns in file contents using regular expressions"
+                .to_string(),
             category: ToolCategory::Search,
             input_schema: json!({
                 "type": "object",
@@ -296,29 +297,23 @@ impl Tool for GrepTool {
             .as_str()
             .ok_or_else(|| anyhow!("Missing required parameter: 'pattern'"))?;
 
-        let path = params["path"]
-            .as_str()
-            .unwrap_or(".")
-            .to_string();
+        let path = params["path"].as_str().unwrap_or(".").to_string();
 
         let include_pattern = params["include"].as_str();
         let exclude_pattern = params["exclude"].as_str();
-        
+
         let context_lines = params["context_lines"]
             .as_u64()
-            .unwrap_or(self.config.default_context_lines as u64) as usize;
-        
+            .unwrap_or(self.config.default_context_lines as u64)
+            as usize;
+
         let max_matches = params["max_matches"]
             .as_u64()
             .unwrap_or(self.config.max_matches as u64) as usize;
-        
-        let case_sensitive = params["case_sensitive"]
-            .as_bool()
-            .unwrap_or(false);
 
-        let recursive = params["recursive"]
-            .as_bool()
-            .unwrap_or(true);
+        let case_sensitive = params["case_sensitive"].as_bool().unwrap_or(false);
+
+        let recursive = params["recursive"].as_bool().unwrap_or(true);
 
         // Check if path is allowed
         if !self.is_path_allowed(&path) {
@@ -416,7 +411,7 @@ impl Tool for GrepTool {
             let file_path = entry.path();
             let file_path_str = file_path.to_string_lossy().to_string();
             let file_name = file_path.file_name().unwrap_or_default().to_string_lossy();
-            
+
             // Check if the path is allowed (to enforce denied_paths)
             if !self.is_path_allowed(&file_path_str) {
                 info!("Skipping denied path: {}", file_path_str);

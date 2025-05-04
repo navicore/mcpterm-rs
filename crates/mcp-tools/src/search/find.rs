@@ -116,7 +116,7 @@ impl FindTool {
     fn is_path_allowed(&self, path_str: &str) -> bool {
         let path = PathBuf::from(path_str);
         let path_str = path.to_string_lossy().to_string();
-        
+
         info!("Checking if path is allowed: '{}'", path_str);
 
         // First check denied paths
@@ -441,7 +441,7 @@ impl Tool for FindTool {
             let path = entry.path();
             let path_str = path.to_string_lossy().to_string();
             let is_dir = entry.file_type().is_dir();
-            
+
             // Check if the path is allowed (to enforce denied_paths)
             if !self.is_path_allowed(&path_str) {
                 info!("Skipping denied path: {}", path_str);
