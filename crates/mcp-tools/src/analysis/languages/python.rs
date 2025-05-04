@@ -214,11 +214,11 @@ impl PythonAnalyzer {
 
             let is_static = cap
                 .name("decorator")
-                .map_or(false, |m| m.as_str() == "staticmethod");
+                .is_some_and(|m| m.as_str() == "staticmethod");
 
             let is_class_method = cap
                 .name("decorator")
-                .map_or(false, |m| m.as_str() == "classmethod");
+                .is_some_and(|m| m.as_str() == "classmethod");
 
             let method_type = if is_static {
                 "static_method"
@@ -420,10 +420,7 @@ impl PythonAnalyzer {
                     0
                 };
 
-                let line_end = line_offsets
-                    .get(line - 1)
-                    .copied()
-                    .unwrap_or_else(|| code.len());
+                let line_end = line_offsets.get(line - 1).copied().unwrap_or(code.len());
 
                 let context = code[line_start..line_end].trim().to_string();
                 let column = start_pos - line_start + 1;

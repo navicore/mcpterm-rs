@@ -81,7 +81,7 @@ impl JsAnalyzer {
             let doc_comment = cap.name("doc").map(|m| {
                 m.as_str()
                     .lines()
-                    .map(|line| line.trim_start_matches(|c| c == '*' || c == ' '))
+                    .map(|line| line.trim_start_matches(['*', ' ']))
                     .collect::<Vec<&str>>()
                     .join("\n")
                     .trim()
@@ -141,7 +141,7 @@ impl JsAnalyzer {
             let doc_comment = cap.name("doc").map(|m| {
                 m.as_str()
                     .lines()
-                    .map(|line| line.trim_start_matches(|c| c == '*' || c == ' '))
+                    .map(|line| line.trim_start_matches(['*', ' ']))
                     .collect::<Vec<&str>>()
                     .join("\n")
                     .trim()
@@ -206,7 +206,7 @@ impl JsAnalyzer {
             let doc_comment = cap.name("doc").map(|m| {
                 m.as_str()
                     .lines()
-                    .map(|line| line.trim_start_matches(|c| c == '*' || c == ' '))
+                    .map(|line| line.trim_start_matches(['*', ' ']))
                     .collect::<Vec<&str>>()
                     .join("\n")
                     .trim()
@@ -268,7 +268,7 @@ impl JsAnalyzer {
             let doc_comment = cap.name("doc").map(|m| {
                 m.as_str()
                     .lines()
-                    .map(|line| line.trim_start_matches(|c| c == '*' || c == ' '))
+                    .map(|line| line.trim_start_matches(['*', ' ']))
                     .collect::<Vec<&str>>()
                     .join("\n")
                     .trim()
@@ -340,7 +340,7 @@ impl JsAnalyzer {
             let doc_comment = cap.name("doc").map(|m| {
                 m.as_str()
                     .lines()
-                    .map(|line| line.trim_start_matches(|c| c == '*' || c == ' '))
+                    .map(|line| line.trim_start_matches(['*', ' ']))
                     .collect::<Vec<&str>>()
                     .join("\n")
                     .trim()
@@ -383,7 +383,7 @@ impl JsAnalyzer {
             let doc_comment = cap.name("doc").map(|m| {
                 m.as_str()
                     .lines()
-                    .map(|line| line.trim_start_matches(|c| c == '*' || c == ' '))
+                    .map(|line| line.trim_start_matches(['*', ' ']))
                     .collect::<Vec<&str>>()
                     .join("\n")
                     .trim()
@@ -535,10 +535,7 @@ impl JsAnalyzer {
                     0
                 };
 
-                let line_end = line_offsets
-                    .get(line - 1)
-                    .copied()
-                    .unwrap_or_else(|| code.len());
+                let line_end = line_offsets.get(line - 1).copied().unwrap_or(code.len());
 
                 let context = code[line_start..line_end].trim().to_string();
                 let column = start_pos - line_start + 1;

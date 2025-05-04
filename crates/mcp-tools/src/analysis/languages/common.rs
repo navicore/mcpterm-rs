@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Types of analysis that can be performed
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AnalysisType {
     /// Analyze function, class, and method definitions
     Definitions,
@@ -14,13 +14,8 @@ pub enum AnalysisType {
     /// Analyze data structures (structs, types, etc.)
     DataStructures,
     /// Comprehensive analysis including all the above
+    #[default]
     Comprehensive,
-}
-
-impl Default for AnalysisType {
-    fn default() -> Self {
-        AnalysisType::Comprehensive
-    }
 }
 
 impl From<&str> for AnalysisType {
@@ -37,20 +32,15 @@ impl From<&str> for AnalysisType {
 }
 
 /// Level of detail to include in analysis results
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum AnalysisDetail {
     /// Basic information only
     Low,
     /// Standard level of detail
+    #[default]
     Medium,
     /// Comprehensive detail
     High,
-}
-
-impl Default for AnalysisDetail {
-    fn default() -> Self {
-        AnalysisDetail::Medium
-    }
 }
 
 impl From<&str> for AnalysisDetail {
