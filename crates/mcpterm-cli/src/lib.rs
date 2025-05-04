@@ -5,6 +5,7 @@ use mcp_core::{api_log, debug_log};
 use mcp_llm::{BedrockClient, BedrockConfig, LlmClient, StreamChunk};
 use mcp_metrics::{count, gauge, time};
 use mcp_tools::{
+    analysis::LanguageAnalyzerTool,
     filesystem::{FilesystemConfig, ListDirectoryTool, ReadFileTool, WriteFileTool},
     search::{FindConfig, FindTool, GrepConfig, GrepTool},
     shell::{ShellConfig, ShellTool},
@@ -152,6 +153,10 @@ impl CliApp {
         // Register project navigator tool
         let project_navigator = mcp_tools::analysis::ProjectNavigator::new();
         tool_manager.register_tool(Box::new(project_navigator));
+        
+        // Register language analyzer tool
+        let language_analyzer = LanguageAnalyzerTool::new();
+        tool_manager.register_tool(Box::new(language_analyzer));
 
         Self {
             context: ConversationContext::new(),
