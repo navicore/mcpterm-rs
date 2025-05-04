@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
-use tracing::{warn, debug, error};
+use tracing::{warn, debug, error, trace, info};
 
 // Bedrock specific errors
 #[derive(Debug, thiserror::Error)]
@@ -360,6 +360,10 @@ impl LlmClient for BedrockClient {
         debug!("Sending request to Bedrock: {}", self.config.model_id);
         debug!("Request payload: {}", String::from_utf8_lossy(&payload_bytes));
         
+        // Log detailed request JSON at TRACE level (only shown with LOG_LEVEL=trace)
+        trace!("Raw JSON request payload to Bedrock: {}", 
+               serde_json::to_string_pretty(&claude_payload).unwrap_or_default());
+        
         // Send the request to Bedrock
         let output = match self.client.invoke_model()
             .body(Blob::new(payload_bytes))
@@ -381,6 +385,9 @@ impl LlmClient for BedrockClient {
         let response_str = String::from_utf8(response_bytes.as_ref().to_vec())?;
         debug!("Received response from Bedrock: {}", response_str);
         
+        // Log full raw response at TRACE level (only shown with LOG_LEVEL=trace)
+        trace!("Raw JSON response from Bedrock: {}", response_str);
+        
         // Check if request was cancelled
         {
             let active_requests = self.active_requests.lock().unwrap();
@@ -401,6 +408,11 @@ impl LlmClient for BedrockClient {
         match serde_json::from_str::<ClaudeResponse>(&response_str) {
             Ok(claude_response) => {
                 debug!("Successfully parsed Claude response: {:?}", claude_response.id);
+                
+                // Log structured parsed response at TRACE level
+                trace!("Parsed Claude response structure: {}", 
+                      serde_json::to_string_pretty(&claude_response).unwrap_or_default());
+                
                 self.parse_claude_response(&claude_response)
             },
             Err(err) => {
@@ -455,6 +467,10 @@ impl LlmClient for BedrockClient {
         
         debug!("Sending streaming request to Bedrock: {}", self.config.model_id);
         debug!("Request payload: {}", String::from_utf8_lossy(&payload_bytes));
+        
+        // Log detailed request JSON at TRACE level (only shown with LOG_LEVEL=trace)
+        trace!("Raw streaming JSON request payload to Bedrock: {}", 
+              serde_json::to_string_pretty(&claude_payload).unwrap_or_default());
         
         // Create a channel for the stream
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<StreamChunk>>(100);
@@ -521,6 +537,9 @@ impl LlmClient for BedrockClient {
             let response_str = String::from_utf8_lossy(response_bytes.as_ref()).to_string();
             debug!("Response: {}", response_str);
             
+            // Log full raw response at TRACE level (only shown with LOG_LEVEL=trace)
+            trace!("Raw JSON streaming response from Bedrock: {}", response_str);
+            
             // Check if request was cancelled
             {
                 let active_requests = active_requests.lock().unwrap();
@@ -536,6 +555,10 @@ impl LlmClient for BedrockClient {
             match serde_json::from_str::<ClaudeResponse>(&response_str) {
                 Ok(claude_response) => {
                     debug!("Successfully parsed Claude response: {:?}", claude_response.id);
+                    
+                    // Log structured parsed response at TRACE level
+                    trace!("Parsed Claude streaming response structure: {}", 
+                           serde_json::to_string_pretty(&claude_response).unwrap_or_default());
                     
                     // Get the text content from Claude
                     let content = claude_response.content.iter()

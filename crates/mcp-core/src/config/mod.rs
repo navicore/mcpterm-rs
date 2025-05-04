@@ -21,6 +21,8 @@ pub struct UiConfig {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LoggingConfig {
     pub api_debug: bool,
+    // Note: log_dir is currently ignored as all logs go to /tmp
+    // Kept for backward compatibility
     pub log_dir: Option<String>,
 }
 
@@ -101,7 +103,7 @@ impl Default for Config {
             },
             logging: LoggingConfig {
                 api_debug: false,
-                log_dir: None, // Default to None, will use system temp directory
+                log_dir: None, // Ignored - all logs go to /tmp
             },
             mcp: McpConfig::default(),
         }

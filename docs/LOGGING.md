@@ -1,90 +1,90 @@
-# Logging Guidelines for mcpterm-rs
+# Logging in mcpterm-rs
 
 ## Overview
 
-This document outlines the logging approach for the mcpterm-rs project. We use the `tracing` crate for structured logging throughout the application.
+mcpterm-rs uses a tracing-based logging system that supports proper log levels through environment variables. This allows you to see detailed information including raw API requests and responses when debugging.
 
-## Logging Setup
+## Log Files
 
-### Log File Locations
+All logs go to a single file for simplicity:
 
-By default, logs are written to standard temporary directories:
+- `/tmp/mcpterm.log`: Unified log file with proper log levels
 
-- Main log file: `/tmp/mcpterm-debug.log` (or platform-specific temp directory)
-- Fallback log file: `/tmp/mcpterm-fallback.log` (in case of main log failure)
-
-These paths will be standardized across platforms with appropriate OS-specific temporary directory detection.
-
-### Initialization
-
-Logging is initialized in the main entry points using `tracing_subscriber`:
-
-```rust
-// Initialize logging
-tracing_subscriber::fmt::init();
-```
-
-In the future, we plan to extend this with:
-- Custom file-based logging configuration
-- Platform-specific log file locations
-- Log rotation and size limits
+Using a consistent location in `/tmp` regardless of platform makes logs easy to find.
 
 ## Log Levels
 
-Use appropriate log levels throughout the codebase:
+The application respects the standard `LOG_LEVEL` environment variable to control logging verbosity. Log levels are hierarchical, meaning that each level includes all higher priority levels:
 
-| Level | Usage |
-|-------|-------|
-| `error!` | Critical errors that prevent functionality from working |
-| `warn!` | Issues that don't break functionality but are concerning |
-| `info!` | Important application events and state changes |
-| `debug!` | Detailed information useful for troubleshooting |
-| `trace!` | Very verbose information for deep debugging |
+| Level | Includes | Usage |
+|-------|----------|-------|
+| `trace` | trace, debug, info, warn, error | Most verbose - shows all logs including raw API requests/responses |
+| `debug` | debug, info, warn, error | Detailed information useful for troubleshooting |
+| `info` | info, warn, error | Important application events and state changes (default) |
+| `warn` | warn, error | Issues that don't break functionality but are concerning |
+| `error` | error | Critical errors that prevent functionality from working |
 
-## Logging Guidelines
+## How to Configure Log Levels
 
-1. **Be Contextual**: Include relevant context in your log messages. Use structured logging where appropriate.
+### To see LLM API requests and responses
 
-   ```rust
-   debug!("Processing user message: {}", message);
-   ```
+To see the raw JSON sent to and received from the LLM API, use the `trace` log level:
 
-2. **Be Concise**: Keep log messages clear and to the point.
-
-3. **Include Identifiers**: For operations spanning multiple components, include request IDs or other identifiers.
-
-   ```rust
-   debug!("Request {} was cancelled", request_id);
-   ```
-
-4. **Error Details**: When logging errors, include enough information to diagnose the issue.
-
-   ```rust
-   error!("Failed to read conversation context: {:?}", err);
-   ```
-
-5. **Performance**: Avoid expensive computations in log statements, particularly at trace/debug levels which might be compiled out in release builds.
-
-## Testing Logging
-
-When implementing tests, you can capture and verify log output using the `tracing_test` crate:
-
-```rust
-#[test]
-fn test_with_logs() {
-    // Will capture logs during test execution
-    let _guard = init_test_logging();
-    
-    // Your test code that produces logs
-    
-    // Assert logs contain expected messages
-    assert_logs_contain("Expected log message");
-}
+```bash
+LOG_LEVEL=trace mcpterm-cli "Your prompt"
 ```
 
-## Future Improvements
+### To debug specific components
 
-- Configuration file for adjusting log levels and destinations
-- Integration with platform-specific logging systems
-- Structured logging with additional metadata
-- Log aggregation support
+You can configure different log levels for different parts of the application:
+
+```bash
+LOG_LEVEL=info,mcp_llm=trace,mcp_runtime=debug mcpterm-cli "Your prompt"
+```
+
+This sets:
+- Default log level to `info`
+- `mcp_llm` crate to `trace` level (shows API payloads)
+- `mcp_runtime` crate to `debug` level
+
+### Using RUST_LOG instead
+
+The system also supports the standard `RUST_LOG` environment variable if you prefer:
+
+```bash
+RUST_LOG=trace mcpterm-cli "Your prompt"
+```
+
+## Backward Compatibility
+
+For backward compatibility, we maintain the `--verbose` command-line flag which enables verbose logging in the legacy logging system. This is independent of the tracing-based log levels.
+
+## Viewing Logs
+
+To view logs as they're generated, you can use `tail` or a similar utility:
+
+```bash
+tail -f /tmp/mcpterm.log
+```
+
+For watching only relevant sections of high-volume logs, you might use `grep`:
+
+```bash
+tail -f /tmp/mcpterm.log | grep "Raw JSON"
+```
+
+## Example
+
+The project includes a comprehensive example that demonstrates the logging system:
+
+```bash
+# Run the example with different log levels
+cargo run --example logging_levels
+LOG_LEVEL=debug cargo run --example logging_levels
+LOG_LEVEL=trace cargo run --example logging_levels
+```
+
+The example is located at `crates/mcp-core/examples/logging_levels.rs` and demonstrates:
+- Basic logging at different levels
+- Module-specific logging
+- Structured logging with metadata

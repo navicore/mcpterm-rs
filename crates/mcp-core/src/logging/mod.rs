@@ -7,6 +7,10 @@ use std::sync::{
 };
 use chrono::Local;
 
+// New tracing-based logging system
+pub mod tracing;
+pub use self::tracing::*;
+
 // Use OnceLock for the log file path to ensure thread-safe initialization
 static DEBUG_LOG_FILE: OnceLock<PathBuf> = OnceLock::new();
 static FALLBACK_LOG_FILE: OnceLock<PathBuf> = OnceLock::new();
@@ -17,12 +21,10 @@ static VERBOSE_LOGGING: AtomicBool = AtomicBool::new(false);
 
 /// Initialize the debug log file
 pub fn init_debug_log() -> std::io::Result<()> {
-    // Determine the log directory
-    let log_dir = std::env::temp_dir();
-    
-    // Create log paths
-    let log_path = log_dir.join("mcpterm-debug.log");
-    let fallback_path = log_dir.join("mcpterm-fallback.log");
+    // Create consistent log files in /tmp regardless of platform
+    // This is more idiomatic for Unix systems and easier to find
+    let log_path = PathBuf::from("/tmp/mcpterm-debug.log");
+    let fallback_path = PathBuf::from("/tmp/mcpterm-fallback.log");
     
     // Print the log file paths to stdout once during startup
     println!("Debug log file: {}", log_path.display());

@@ -2,11 +2,12 @@ use anyhow::Result;
 use clap::Parser;
 use mcpterm_cli::{CliApp, CliConfig};
 use mcp_metrics::{LogDestination, MetricsRegistry, MetricsDestination};
-use mcp_core::{init_debug_log, debug_log, set_verbose_logging, Config};
+use mcp_core::{set_verbose_logging, Config, init_tracing};
 use std::time::Duration;
 use std::io::Write;
 use std::path::PathBuf;
 use tokio::time::sleep;
+use tracing::{info, debug, trace};
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -57,15 +58,21 @@ async fn main() -> Result<()> {
     // Parse command line arguments
     let cli = Cli::parse();
     
-    // Initialize our custom logging
-    init_debug_log()?;
-    debug_log("Starting mcpterm-cli");
+    // Initialize our tracing-based logging system only
+    let log_file = init_tracing();
+    println!("Log file: {}", log_file.display());
     
     // Set verbose logging if requested
     if cli.verbose {
         set_verbose_logging(true);
-        debug_log("Verbose logging enabled");
+        // Use tracing for logging instead of the old system
+        debug!("Verbose logging enabled");
     }
+    
+    // Log initial messages with tracing
+    info!("Starting mcpterm-cli with tracing");
+    debug!("Log level debugging enabled");
+    trace!("Log level tracing enabled - will show detailed API requests/responses");
     
     // Setup metrics reporting
     let log_destination = LogDestination;
@@ -74,20 +81,20 @@ async fn main() -> Result<()> {
             sleep(Duration::from_secs(300)).await; // Report every 5 minutes
             let report = MetricsRegistry::global().generate_report();
             if let Err(e) = log_destination.send_report(&report) {
-                debug_log(&format!("Error sending metrics report: {}", e));
+                debug!("Error sending metrics report: {}", e);
             }
         }
     });
     
     // Load configuration
-    debug_log("Loading configuration");
+    debug!("Loading configuration");
     let config = match Config::load(cli.config.as_ref(), Some(&cli.model), cli.region.as_deref()) {
         Ok(config) => {
-            debug_log("Configuration loaded successfully");
+            debug!("Configuration loaded successfully");
             config
         },
         Err(e) => {
-            debug_log(&format!("Error loading config: {}", e));
+            debug!("Error loading config: {}", e);
             eprintln!("Warning: Could not load configuration: {}", e);
             // Create a default config
             Config::default()
@@ -96,11 +103,11 @@ async fn main() -> Result<()> {
     
     // Get the active model
     let model_config = config.get_active_model().unwrap_or_else(|| {
-        debug_log("No active model found in config, using default");
+        debug!("No active model found in config, using default");
         config.model_settings.models.first().unwrap().clone()
     });
     
-    debug_log(&format!("Using model: {}", model_config.model_id));
+    debug!("Using model: {}", model_config.model_id);
     
     // Create CLI configuration
     let cli_config = CliConfig {
@@ -110,39 +117,39 @@ async fn main() -> Result<()> {
         streaming: !cli.no_streaming,
     };
     
-    debug_log(&format!("CLI config: {:#?}", cli_config));
+    debug!("CLI config: {:#?}", cli_config);
     
     // Create CLI application with configuration
     let mut app = CliApp::new().with_config(cli_config);
     
     // Initialize the application
-    debug_log("Initializing CLI application");
+    debug!("Initializing CLI application");
     if let Err(e) = app.initialize().await {
-        debug_log(&format!("Failed to initialize app: {}", e));
+        debug!("Failed to initialize app: {}", e);
         return Err(e);
     }
     
     // Process in interactive or batch mode
     if cli.interactive {
-        debug_log("Starting interactive mode");
+        debug!("Starting interactive mode");
         run_interactive_mode(&mut app).await?;
     } else {
         // Process single prompt or input file
         if let Some(prompt) = cli.prompt {
-            debug_log("Processing single prompt");
+            debug!("Processing single prompt");
             let _response = app.run(&prompt).await?;
             // Response is already printed in app.run
         } else if let Some(input_file) = cli.input {
-            debug_log(&format!("Processing input file: {}", input_file));
+            debug!("Processing input file: {}", input_file);
             process_input_file(&mut app, &input_file, cli.output).await?;
         } else {
-            debug_log("No prompt or input file provided");
+            debug!("No prompt or input file provided");
             eprintln!("Error: No prompt or input file provided");
             std::process::exit(1);
         }
     }
     
-    debug_log("Exiting mcpterm-cli");
+    debug!("Exiting mcpterm-cli");
     Ok(())
 }
 

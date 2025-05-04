@@ -7,3 +7,4 @@ pub use protocol::{Error, Request, Response};
 pub use context::ConversationContext;
 pub use config::Config;
 pub use logging::{init_debug_log, debug_log, api_log, ui_log, set_verbose_logging};
+pub use logging::tracing::{init_tracing, get_log_level};
