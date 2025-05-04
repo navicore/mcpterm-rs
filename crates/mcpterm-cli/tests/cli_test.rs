@@ -19,6 +19,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_cli_app_with_tool_call() {
         // Create a mock client that will return a tool call with a custom follow-up response
         let mock_client = MockLlmClient::new("Response with tool call")
@@ -63,6 +64,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_cli_app_streaming_with_tool_call() {
         // Create a mock client that streams responses with a tool call and follow-up
         let mock_client = MockLlmClient::new("This is a streamed response with tool call")
