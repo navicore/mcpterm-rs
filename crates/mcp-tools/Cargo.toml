@@ -19,6 +19,7 @@ globset = { workspace = true }
 wait-timeout = { workspace = true }
 regex = { workspace = true }
 chrono = { workspace = true }
+similar = "2.4.0"
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+pub mod diff;
 pub mod filesystem;
 pub mod registry;
 pub mod search;
@@ -14,6 +15,7 @@ pub enum ToolCategory {
     Shell,
     Filesystem,
     Search,
+    Utility,
     General,
 }
 
