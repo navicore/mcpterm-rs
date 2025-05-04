@@ -1,0 +1,64 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mcp-core",
+    "crates/mcp-resources", 
+    "crates/mcp-tools",
+    "crates/mcp-runtime",
+    "crates/mcp-llm",
+    "crates/mcpterm-tui",
+    "crates/mcpterm-cli"
+]
+
+[workspace.dependencies]
+# Terminal UI
+ratatui = "0.29.0"
+crossterm = "0.29.0"
+tui-textarea = { version = "0.7.0", features = ["ratatui", "crossterm", "search"] }
+edtui = { git = "https://github.com/navicore/edtui", branch = "mcpterm-style-api", features = ["mouse-support", "syntax-highlighting"], default-features = false }
+arboard = "3.5.0"
+
+# AWS SDK for Bedrock
+aws-config = "1.1.1"
+aws-sdk-bedrockruntime = "1.5.0"
+aws-smithy-runtime-api = "1.1.1"
+aws-smithy-types = "1.1.1"
+
+# Utilities
+tokio = { version = "1.28.0", features = ["full"] }
+anyhow = "1.0.75"
+serde = { version = "1.0.164", features = ["derive"] }
+serde_json = "1.0.99"
+uuid = { version = "1.4.1", features = ["v4"] }
+clap = { version = "4.3.10", features = ["derive"] }
+dirs = "6.0.0"
+chrono = "0.4"
+tempfile = "3.10.0"
+url = "2.3.1"
+base64 = "0.13.0"
+futures = "0.3.28"
+regex = "1.9.5"
+
+# For async traits
+async-trait = "0.1.73"
+
+# MCP Tool Dependencies
+walkdir = "2.4.0"
+globset = "0.4.13"
+wait-timeout = "0.2.0"
+
+# For event handling between components
+crossbeam-channel = "0.5.8"
+
+# For logging/tracing
+tracing = "0.1.37"
+tracing-appender = "0.2"
+tracing-subscriber = "0.3.17"
+
+# For error handling
+thiserror = "1.0.43"
+
+[workspace.package]
+authors = ["Your Name <your.email@example.com>"]
+edition = "2021"
+description = "Terminal-based AI coding assistant using MCP protocol"
