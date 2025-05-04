@@ -1,12 +1,10 @@
 pub mod event_bus;
-pub mod session;
 pub mod executor;
+pub mod session;
 
 pub use event_bus::{
-    EventBus, UiEvent, ModelEvent, ApiEvent, 
-    KeyEvent, KeyCode, KeyModifiers, 
-    EventType, EventHandler, EventHandlerTrait, ScrollDirection,
-    create_handler, FnEventHandler
+    create_handler, ApiEvent, EventBus, EventHandler, EventHandlerTrait, EventType, FnEventHandler,
+    KeyCode, KeyEvent, KeyModifiers, ModelEvent, ScrollDirection, UiEvent,
 };
-pub use session::{Session, SessionManager};
 pub use executor::ToolExecutor;
+pub use session::{Session, SessionManager};

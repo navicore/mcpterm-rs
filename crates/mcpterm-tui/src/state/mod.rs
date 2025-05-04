@@ -40,14 +40,14 @@ impl AppState {
             processing: false,
         }
     }
-    
+
     pub fn add_message(&mut self, content: String, message_type: MessageType) {
         let message = Message {
             content,
             message_type,
         };
         self.messages.push(message.clone());
-        
+
         // Add to conversation context
         if let Ok(mut context) = self.context.write() {
             match message_type {

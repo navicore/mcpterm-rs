@@ -40,13 +40,18 @@ impl MockLlmClient {
 impl LlmClient for MockLlmClient {
     async fn send_message(&self, context: &ConversationContext) -> Result<LlmResponse> {
         // Extract the user's last message to include in the response
-        let last_message = context.messages.last()
+        let last_message = context
+            .messages
+            .last()
             .map(|m| m.content.clone())
             .unwrap_or_default();
 
         // Create mock response
-        let response_text = format!("{} (responding to: {})", self.response_content, last_message);
-        
+        let response_text = format!(
+            "{} (responding to: {})",
+            self.response_content, last_message
+        );
+
         // Create tool calls if requested
         let tool_calls = if self.add_tool_call {
             vec![ToolCall {
@@ -60,7 +65,7 @@ impl LlmClient for MockLlmClient {
         } else {
             vec![]
         };
-        
+
         Ok(LlmResponse {
             id: "mock-response-id".to_string(),
             content: response_text,
@@ -73,25 +78,30 @@ impl LlmClient for MockLlmClient {
         context: &ConversationContext,
     ) -> Result<Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>> {
         // Extract the user's last message to include in the response
-        let last_message = context.messages.last()
+        let last_message = context
+            .messages
+            .last()
             .map(|m| m.content.clone())
             .unwrap_or_default();
 
         // Create the response text with the last message
-        let response_text = format!("{} (responding to: {})", self.response_content, last_message);
-        
+        let response_text = format!(
+            "{} (responding to: {})",
+            self.response_content, last_message
+        );
+
         // Create a channel for the stream
         let (tx, rx) = mpsc::channel::<Result<StreamChunk>>(5);
-        
+
         // Clone data for the async task
         let response_text_clone = response_text.clone();
         let add_tool_call = self.add_tool_call;
-        
+
         // Spawn a task to simulate streaming the response
         tokio::spawn(async move {
             // Split the response into chunks
             let words: Vec<&str> = response_text_clone.split_whitespace().collect();
-            
+
             // Send each chunk with small delay
             for chunk in words.chunks(2) {
                 let chunk_text = chunk.join(" ");
@@ -103,17 +113,17 @@ impl LlmClient for MockLlmClient {
                         tool_call: None,
                         is_complete: false,
                     };
-                    
+
                     if let Err(e) = tx.send(Ok(stream_chunk)).await {
                         eprintln!("Error sending stream chunk: {}", e);
                         break;
                     }
-                    
+
                     // Small delay between chunks to simulate streaming
                     tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
                 }
             }
-            
+
             // Send final chunk with tool call if needed
             let tool_call = if add_tool_call {
                 Some(ToolCall {
@@ -127,7 +137,7 @@ impl LlmClient for MockLlmClient {
             } else {
                 None
             };
-            
+
             // Send completion message
             let final_chunk = StreamChunk {
                 id: "mock-stream-chunk".to_string(),
@@ -136,10 +146,10 @@ impl LlmClient for MockLlmClient {
                 tool_call,
                 is_complete: true,
             };
-            
+
             let _ = tx.send(Ok(final_chunk)).await;
         });
-        
+
         // Return the receiver as a stream
         Ok(Box::new(ReceiverStream::new(rx)))
     }

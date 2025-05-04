@@ -31,9 +31,7 @@ pub struct AnthropicClient {
 
 impl AnthropicClient {
     pub fn new(config: AnthropicConfig) -> Self {
-        Self {
-            config,
-        }
+        Self { config }
     }
 }
 
@@ -47,15 +45,15 @@ impl LlmClient for AnthropicClient {
             tool_calls: Vec::new(),
         })
     }
-    
+
     async fn stream_message(
-        &self, 
-        _context: &ConversationContext
+        &self,
+        _context: &ConversationContext,
     ) -> Result<Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>> {
         // Placeholder implementation
         unimplemented!("Streaming not yet implemented for Anthropic")
     }
-    
+
     fn cancel_request(&self, _request_id: &str) -> Result<()> {
         // Placeholder implementation
         Ok(())

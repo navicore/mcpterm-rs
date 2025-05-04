@@ -30,11 +30,11 @@ pub struct StreamChunk {
 #[async_trait]
 pub trait LlmClient: Send + Sync {
     async fn send_message(&self, context: &ConversationContext) -> Result<LlmResponse>;
-    
+
     async fn stream_message(
-        &self, 
-        context: &ConversationContext
+        &self,
+        context: &ConversationContext,
     ) -> Result<Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>>;
-    
+
     fn cancel_request(&self, request_id: &str) -> Result<()>;
 }

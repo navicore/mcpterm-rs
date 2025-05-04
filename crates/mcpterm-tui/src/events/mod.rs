@@ -18,10 +18,10 @@ impl EventHandler {
     pub fn new() -> Result<Self> {
         let tick_rate = Duration::from_millis(100);
         let (tx, rx) = crossbeam_channel::unbounded();
-        
+
         // Clone channel for event thread
         let event_tx = tx.clone();
-        
+
         // Spawn input handling thread
         thread::spawn(move || {
             loop {
@@ -40,7 +40,7 @@ impl EventHandler {
                         }
                     }
                 }
-                
+
                 // Send tick event
                 if let Err(_) = event_tx.send(Event::Tick) {
                     // Channel closed, exit thread
@@ -48,13 +48,10 @@ impl EventHandler {
                 }
             }
         });
-        
-        Ok(Self {
-            rx,
-            _tx: tx,
-        })
+
+        Ok(Self { rx, _tx: tx })
     }
-    
+
     pub fn next(&self) -> Result<Event> {
         Ok(self.rx.recv()?)
     }

@@ -10,11 +10,9 @@ pub struct ToolExecutor {
 
 impl ToolExecutor {
     pub fn new(tool_manager: ToolManager) -> Self {
-        Self {
-            tool_manager,
-        }
+        Self { tool_manager }
     }
-    
+
     pub async fn execute_tool(&self, tool_id: &str, params: Value) -> Result<ToolResult> {
         // This is a placeholder implementation
         // In the real implementation, we'd apply safety constraints
@@ -25,12 +23,12 @@ impl ToolExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_executor_creation() {
         let tool_manager = ToolManager::new();
         let executor = ToolExecutor::new(tool_manager);
-        
+
         // Just testing that creation works
         assert!(true);
     }

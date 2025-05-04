@@ -1,9 +1,9 @@
+use anyhow::{anyhow, Result};
+use crossbeam_channel::{self, bounded, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use crossbeam_channel::{self, Receiver, Sender, bounded};
-use anyhow::{Result, anyhow};
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
-use super::events::{EventType, UiEvent, ModelEvent, ApiEvent, EventHandler, EventHandlerTrait};
+use super::events::{ApiEvent, EventHandler, EventHandlerTrait, EventType, ModelEvent, UiEvent};
 
 const DEFAULT_BUFFER_SIZE: usize = 100;
 
@@ -80,7 +80,10 @@ impl EventBus {
         match self.ui_handlers.lock() {
             Ok(mut handlers) => {
                 handlers.push(handler);
-                debug!("Registered UI event handler, total handlers: {}", handlers.len());
+                debug!(
+                    "Registered UI event handler, total handlers: {}",
+                    handlers.len()
+                );
                 Ok(())
             }
             Err(_) => Err(anyhow!("Failed to acquire lock on UI handlers")),
@@ -92,7 +95,10 @@ impl EventBus {
         match self.model_handlers.lock() {
             Ok(mut handlers) => {
                 handlers.push(handler);
-                debug!("Registered Model event handler, total handlers: {}", handlers.len());
+                debug!(
+                    "Registered Model event handler, total handlers: {}",
+                    handlers.len()
+                );
                 Ok(())
             }
             Err(_) => Err(anyhow!("Failed to acquire lock on Model handlers")),
@@ -104,7 +110,10 @@ impl EventBus {
         match self.api_handlers.lock() {
             Ok(mut handlers) => {
                 handlers.push(handler);
-                debug!("Registered API event handler, total handlers: {}", handlers.len());
+                debug!(
+                    "Registered API event handler, total handlers: {}",
+                    handlers.len()
+                );
                 Ok(())
             }
             Err(_) => Err(anyhow!("Failed to acquire lock on API handlers")),
@@ -116,7 +125,7 @@ impl EventBus {
         self.start_ui_event_loop()?;
         self.start_model_event_loop()?;
         self.start_api_event_loop()?;
-        
+
         info!("Event distribution started");
         Ok(())
     }
@@ -125,11 +134,11 @@ impl EventBus {
     fn start_ui_event_loop(&self) -> Result<()> {
         let rx = self.ui_rx.clone();
         let handlers = self.ui_handlers.clone();
-        
+
         tokio::spawn(async move {
             Self::run_event_loop("UI".to_string(), rx, handlers).await;
         });
-        
+
         Ok(())
     }
 
@@ -137,11 +146,11 @@ impl EventBus {
     fn start_model_event_loop(&self) -> Result<()> {
         let rx = self.model_rx.clone();
         let handlers = self.model_handlers.clone();
-        
+
         tokio::spawn(async move {
             Self::run_event_loop("Model".to_string(), rx, handlers).await;
         });
-        
+
         Ok(())
     }
 
@@ -149,11 +158,11 @@ impl EventBus {
     fn start_api_event_loop(&self) -> Result<()> {
         let rx = self.api_rx.clone();
         let handlers = self.api_handlers.clone();
-        
+
         tokio::spawn(async move {
             Self::run_event_loop("API".to_string(), rx, handlers).await;
         });
-        
+
         Ok(())
     }
 
@@ -164,10 +173,10 @@ impl EventBus {
         handlers: Arc<Mutex<Vec<EventHandler<T>>>>,
     ) {
         debug!("{} event loop started", name);
-        
+
         // Use a tokio task to receive events from crossbeam channel
         let (tx, mut task_rx) = tokio::sync::mpsc::channel::<T>(100);
-        
+
         // Spawn a task to bridge crossbeam and tokio channels
         std::thread::spawn(move || {
             while let Ok(event) = rx.recv() {
@@ -176,10 +185,10 @@ impl EventBus {
                 }
             }
         });
-        
+
         while let Some(event) = task_rx.recv().await {
             debug!("Received {} event: {:?}", name, event);
-            
+
             // Clone all handlers to avoid holding the lock during async work
             let cloned_handlers = {
                 match handlers.lock() {
@@ -190,13 +199,13 @@ impl EventBus {
                     }
                 }
             };
-            
+
             // Process each handler with its own event clone
             let mut join_handles = Vec::new();
             for handler in cloned_handlers {
                 let event_clone = event.clone();
                 let name_clone = name.clone();
-                
+
                 let handle = tokio::spawn(async move {
                     if let Err(e) = handler.handle(event_clone).await {
                         warn!("Error in {} event handler: {}", name_clone, e);
@@ -204,7 +213,7 @@ impl EventBus {
                 });
                 join_handles.push(handle);
             }
-            
+
             // Wait for all handlers to complete
             for handle in join_handles {
                 if let Err(e) = handle.await {
@@ -212,7 +221,7 @@ impl EventBus {
                 }
             }
         }
-        
+
         info!("{} event loop terminated", name);
     }
 }
@@ -226,9 +235,12 @@ impl Default for EventBus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
-    use tokio::time::{sleep, Duration};
     use crate::event_bus::events::create_handler;
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    use tokio::time::{sleep, Duration};
 
     #[tokio::test]
     async fn test_event_bus_creation() {
@@ -241,7 +253,7 @@ mod tests {
         let bus = EventBus::new();
         let event_processed = Arc::new(AtomicBool::new(false));
         let event_processed_clone = event_processed.clone();
-        
+
         let handler = create_handler(move |event: UiEvent| {
             let event_processed = event_processed_clone.clone();
             Box::pin(async move {
@@ -252,23 +264,28 @@ mod tests {
                 Ok(())
             })
         });
-        
+
         bus.register_ui_handler(handler).unwrap();
         bus.start_event_distribution().unwrap();
-        
+
         // Send a test event
-        bus.ui_sender().send(UiEvent::UserInput("test input".to_string())).unwrap();
-        
+        bus.ui_sender()
+            .send(UiEvent::UserInput("test input".to_string()))
+            .unwrap();
+
         // Set a timeout for the test
         let timeout = Duration::from_secs(1);
         let start = std::time::Instant::now();
-        
+
         // Wait for event processing or timeout
         while !event_processed.load(Ordering::SeqCst) && start.elapsed() < timeout {
             sleep(Duration::from_millis(10)).await;
         }
-        
-        assert!(event_processed.load(Ordering::SeqCst), "Event was not processed within timeout");
+
+        assert!(
+            event_processed.load(Ordering::SeqCst),
+            "Event was not processed within timeout"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -276,7 +293,7 @@ mod tests {
         let bus = EventBus::new();
         let event_processed = Arc::new(AtomicBool::new(false));
         let event_processed_clone = event_processed.clone();
-        
+
         let handler = create_handler(move |event: ModelEvent| {
             let event_processed = event_processed_clone.clone();
             Box::pin(async move {
@@ -287,22 +304,27 @@ mod tests {
                 Ok(())
             })
         });
-        
+
         bus.register_model_handler(handler).unwrap();
         bus.start_event_distribution().unwrap();
-        
+
         // Send a test event
-        bus.model_sender().send(ModelEvent::ProcessUserMessage("test message".to_string())).unwrap();
-        
+        bus.model_sender()
+            .send(ModelEvent::ProcessUserMessage("test message".to_string()))
+            .unwrap();
+
         // Set a timeout for the test
         let timeout = Duration::from_secs(1);
         let start = std::time::Instant::now();
-        
+
         // Wait for event processing or timeout
         while !event_processed.load(Ordering::SeqCst) && start.elapsed() < timeout {
             sleep(Duration::from_millis(10)).await;
         }
-        
-        assert!(event_processed.load(Ordering::SeqCst), "Event was not processed within timeout");
+
+        assert!(
+            event_processed.load(Ordering::SeqCst),
+            "Event was not processed within timeout"
+        );
     }
 }

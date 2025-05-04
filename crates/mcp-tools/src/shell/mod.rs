@@ -1,4 +1,4 @@
-use crate::{Tool, ToolMetadata, ToolResult, ToolStatus, ToolCategory};
+use crate::{Tool, ToolCategory, ToolMetadata, ToolResult, ToolStatus};
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -52,7 +52,7 @@ impl Tool for ShellTool {
             }),
         }
     }
-    
+
     async fn execute(&self, _params: Value) -> Result<ToolResult> {
         // Placeholder implementation
         Ok(ToolResult {

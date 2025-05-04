@@ -22,8 +22,8 @@ impl<T> Clone for Box<dyn EventHandlerTrait<T>> {
 }
 
 // Define a struct that wraps a closure
-pub struct FnEventHandler<T, F> 
-where 
+pub struct FnEventHandler<T, F>
+where
     F: Fn(T) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send + Sync + Clone + 'static,
     T: Clone + Send + Sync + 'static,
 {
@@ -31,8 +31,8 @@ where
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T, F> FnEventHandler<T, F> 
-where 
+impl<T, F> FnEventHandler<T, F>
+where
     F: Fn(T) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send + Sync + Clone + 'static,
     T: Clone + Send + Sync + 'static,
 {
@@ -44,8 +44,8 @@ where
     }
 }
 
-impl<T, F> EventHandlerTrait<T> for FnEventHandler<T, F> 
-where 
+impl<T, F> EventHandlerTrait<T> for FnEventHandler<T, F>
+where
     F: Fn(T) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send + Sync + Clone + 'static,
     T: Clone + Send + Sync + 'static,
 {
@@ -78,22 +78,22 @@ where
 pub enum UiEvent {
     /// User pressed a key
     KeyPress(KeyEvent),
-    
+
     /// User submitted input
     UserInput(String),
-    
+
     /// User requested cancellation of current operation
     RequestCancellation,
-    
+
     /// User wants to quit the application
     Quit,
-    
+
     /// User wants to scroll the message view
     Scroll(ScrollDirection, u16),
-    
+
     /// User wants to clear the conversation
     ClearConversation,
-    
+
     /// User toggles focus between components
     ToggleFocus,
 }
@@ -103,25 +103,25 @@ pub enum UiEvent {
 pub enum ModelEvent {
     /// Process a new user message
     ProcessUserMessage(String),
-    
+
     /// A tool has returned a result
     ToolResult(String, Value),
-    
+
     /// Reset the conversation context
     ResetContext,
-    
+
     /// New message received from LLM
     LlmMessage(String),
-    
+
     /// Stream chunk received from LLM
     LlmStreamChunk(String),
-    
+
     /// Request to update the conversation context
     UpdateContext(Arc<ConversationContext>),
-    
+
     /// LLM has requested a tool execution
     ToolRequest(String, Value),
-    
+
     /// LLM response completed
     LlmResponseComplete,
 }
@@ -131,19 +131,19 @@ pub enum ModelEvent {
 pub enum ApiEvent {
     /// Send a request to the LLM
     SendRequest(String),
-    
+
     /// Process a stream from the LLM
     ProcessStream(String),
-    
+
     /// Cancel an ongoing request
     CancelRequest(String),
-    
+
     /// API connection established
     ConnectionEstablished,
-    
+
     /// API connection lost
     ConnectionLost(String),
-    
+
     /// API error occurred
     Error(String),
 }
@@ -211,15 +211,15 @@ impl KeyCode {
     pub fn is_enter(&self) -> bool {
         matches!(self, KeyCode::Enter)
     }
-    
+
     pub fn is_esc(&self) -> bool {
         matches!(self, KeyCode::Esc)
     }
-    
+
     pub fn is_backspace(&self) -> bool {
         matches!(self, KeyCode::Backspace)
     }
-    
+
     pub fn is_tab(&self) -> bool {
         matches!(self, KeyCode::Tab)
     }

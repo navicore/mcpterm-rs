@@ -54,7 +54,7 @@ impl ConversationContext {
             tool_results: None,
         });
     }
-    
+
     pub fn add_assistant_message(&mut self, content: &str) {
         self.messages.push(Message {
             role: MessageRole::Assistant,
@@ -63,7 +63,7 @@ impl ConversationContext {
             tool_results: None,
         });
     }
-    
+
     pub fn add_tool_message(&mut self, content: &str) {
         self.messages.push(Message {
             role: MessageRole::Tool,
@@ -72,7 +72,7 @@ impl ConversationContext {
             tool_results: None,
         });
     }
-    
+
     pub fn add_system_message(&mut self, content: &str) {
         self.messages.push(Message {
             role: MessageRole::System,
@@ -81,7 +81,7 @@ impl ConversationContext {
             tool_results: None,
         });
     }
-    
+
     pub fn add_message(&mut self, role: MessageRole, content: &str) {
         self.messages.push(Message {
             role,

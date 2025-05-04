@@ -43,13 +43,13 @@ impl ResourceManager {
             base_dir: base_dir.into(),
         }
     }
-    
+
     // These are placeholder functions to be implemented
     pub fn register_file(&self, _path: &str, _mode: AccessMode) -> String {
         // Placeholder
         String::from("file://example")
     }
-    
+
     pub fn read_resource(&self, _uri: &str) -> Result<Vec<u8>> {
         // Placeholder
         Ok(Vec::new())
@@ -62,7 +62,7 @@ impl ResourceManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_resource_manager_creation() {
         let manager = ResourceManager::new("/tmp");

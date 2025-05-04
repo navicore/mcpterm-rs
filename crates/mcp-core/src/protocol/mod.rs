@@ -5,16 +5,16 @@ use thiserror::Error;
 pub enum Error {
     #[error("Protocol error: {0}")]
     Protocol(String),
-    
+
     #[error("Invalid request: {0}")]
     InvalidRequest(String),
-    
+
     #[error("Method not found: {0}")]
     MethodNotFound(String),
-    
+
     #[error("Invalid parameters: {0}")]
     InvalidParams(String),
-    
+
     #[error("Internal error: {0}")]
     Internal(String),
 }

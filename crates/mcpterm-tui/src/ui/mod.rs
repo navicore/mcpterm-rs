@@ -11,15 +11,12 @@ pub fn render(f: &mut ratatui::Frame, state: &mut AppState) {
     // Create the layout
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(70),
-            Constraint::Percentage(30),
-        ])
+        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
         .split(f.area());
-    
+
     // Render message viewer
     render_messages::<ratatui::backend::CrosstermBackend<std::io::Stdout>>(f, state, chunks[0]);
-    
+
     // Render input editor
     render_input::<ratatui::backend::CrosstermBackend<std::io::Stdout>>(f, state, chunks[1]);
 }

@@ -1,8 +1,8 @@
 use std::path::PathBuf;
-use tracing_subscriber::{fmt, filter::LevelFilter};
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_appender::non_blocking::WorkerGuard;
 use tracing::Level;
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::{filter::LevelFilter, fmt};
 
 /// Stores the worker guard to keep the non-blocking appender alive
 static mut APPENDER_GUARD: Option<WorkerGuard> = None;
@@ -17,24 +17,20 @@ static mut APPENDER_GUARD: Option<WorkerGuard> = None;
 /// Examples of valid LOG_LEVEL values:
 /// - "trace" - Show all logs at trace level and above
 /// - "info" - Show logs at info level and above (default)
-/// - "mcp_llm=trace,mcp_core=debug" - Different levels for different modules 
+/// - "mcp_llm=trace,mcp_core=debug" - Different levels for different modules
 ///   (requires LOG_LEVEL to be set with directives as shown)
 ///
 /// Returns the log file path so it can be displayed to the user.
 pub fn init_tracing() -> PathBuf {
     // Always use /tmp for log files
     let log_file = PathBuf::from("/tmp/mcpterm.log");
-    
-    // Create a rolling file appender to /tmp/mcpterm.log 
-    let file_appender = RollingFileAppender::new(
-        Rotation::NEVER,
-        "/tmp",
-        "mcpterm.log",
-    );
-    
+
+    // Create a rolling file appender to /tmp/mcpterm.log
+    let file_appender = RollingFileAppender::new(Rotation::NEVER, "/tmp", "mcpterm.log");
+
     // Create a non-blocking writer for the file appender
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-    
+
     // Store the guard to ensure the writer stays alive
     unsafe {
         APPENDER_GUARD = Some(guard);
@@ -44,26 +40,25 @@ pub fn init_tracing() -> PathBuf {
     let log_level_str = std::env::var("LOG_LEVEL")
         .or_else(|_| std::env::var("RUST_LOG"))
         .unwrap_or_else(|_| "info".to_string());
-    
+
     // Check if this is a custom directive format (contains = or ,)
     let is_complex_directive = log_level_str.contains('=') || log_level_str.contains(',');
-    
+
     // Initialize subscriber based on whether we have complex directives
     if is_complex_directive {
         // Use EnvFilter for complex directives
-        let env_filter = 
-            tracing_subscriber::EnvFilter::try_from_env("LOG_LEVEL")
-                .or_else(|_| tracing_subscriber::EnvFilter::try_from_env("RUST_LOG"))
-                .unwrap_or_else(|_| {
-                    // Default to show info, warn, and error logs
-                    tracing_subscriber::EnvFilter::new("info")
-                });
-            
+        let env_filter = tracing_subscriber::EnvFilter::try_from_env("LOG_LEVEL")
+            .or_else(|_| tracing_subscriber::EnvFilter::try_from_env("RUST_LOG"))
+            .unwrap_or_else(|_| {
+                // Default to show info, warn, and error logs
+                tracing_subscriber::EnvFilter::new("info")
+            });
+
         fmt::Subscriber::builder()
             .with_env_filter(env_filter)
             .with_ansi(false) // Disable ANSI color codes in files
             .with_writer(non_blocking)
-            .with_file(true)   // Include file and line information
+            .with_file(true) // Include file and line information
             .with_line_number(true)
             .init();
     } else {
@@ -76,12 +71,12 @@ pub fn init_tracing() -> PathBuf {
             "error" => LevelFilter::ERROR,
             _ => LevelFilter::INFO,
         };
-        
+
         fmt::Subscriber::builder()
             .with_max_level(level_filter)
             .with_ansi(false) // Disable ANSI color codes in files
             .with_writer(non_blocking)
-            .with_file(true)   // Include file and line information
+            .with_file(true) // Include file and line information
             .with_line_number(true)
             .init();
     }

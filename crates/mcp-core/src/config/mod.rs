@@ -111,7 +111,11 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load(config_path: Option<&PathBuf>, model_id: Option<&str>, region: Option<&str>) -> std::io::Result<Self> {
+    pub fn load(
+        config_path: Option<&PathBuf>,
+        model_id: Option<&str>,
+        region: Option<&str>,
+    ) -> std::io::Result<Self> {
         let config_path = if let Some(path) = config_path {
             path.clone()
         } else {

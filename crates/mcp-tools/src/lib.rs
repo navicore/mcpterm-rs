@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-pub mod registry;
-pub mod shell;
 pub mod filesystem;
+pub mod registry;
 pub mod search;
+pub mod shell;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolCategory {
@@ -58,12 +58,12 @@ impl ToolManager {
             tools: HashMap::new(),
         }
     }
-    
+
     pub fn register_tool(&mut self, tool: Box<dyn Tool>) {
         let metadata = tool.metadata();
         self.tools.insert(metadata.id.clone(), tool);
     }
-    
+
     pub async fn execute_tool(&self, tool_id: &str, params: Value) -> Result<ToolResult> {
         // This is a placeholder implementation
         if let Some(tool) = self.tools.get(tool_id) {
@@ -88,7 +88,7 @@ impl Default for ToolManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_tool_manager_creation() {
         let manager = ToolManager::new();
