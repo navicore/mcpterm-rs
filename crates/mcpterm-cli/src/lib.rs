@@ -33,6 +33,7 @@ struct FollowUpResponse {
 }
 
 // Export our modules
+pub mod cli_main;
 pub mod formatter;
 pub mod mock;
 
@@ -51,6 +52,7 @@ pub struct CliConfig {
     pub streaming: bool,
     pub enable_tools: bool,
     pub require_tool_confirmation: bool,
+    pub auto_approve_tools: bool,
 }
 
 impl Default for CliConfig {
@@ -62,6 +64,7 @@ impl Default for CliConfig {
             streaming: true,
             enable_tools: true,              // Enable tool execution by default
             require_tool_confirmation: true, // Require user confirmation for tool execution
+            auto_approve_tools: false,       // Don't auto-approve tools by default
         }
     }
 }
@@ -150,8 +153,8 @@ impl CliApp {
 
         debug!("Executing tool: {} with params: {}", tool_id, params);
 
-        // Get user confirmation if required
-        if self.config.require_tool_confirmation {
+        // Get user confirmation if required and auto-approve is not enabled
+        if self.config.require_tool_confirmation && !self.config.auto_approve_tools {
             println!("\n[Tool Execution Request]");
             println!("Tool: {}", tool_id);
             println!("Parameters: {}", params);
@@ -171,6 +174,14 @@ impl CliApp {
                     }),
                     error: Some("User denied tool execution".to_string()),
                 });
+            }
+        } else if self.config.auto_approve_tools {
+            // If auto-approve is enabled, log and inform
+            debug!("Tool execution auto-approved: {}", tool_id);
+            if self.config.require_tool_confirmation {
+                println!("\n[Tool Execution Auto-Approved]");
+                println!("Tool: {}", tool_id);
+                println!("Parameters: {}", params);
             }
         }
 

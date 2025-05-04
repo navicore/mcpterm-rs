@@ -2126,6 +2126,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atty",
+ "mcpterm-cli",
+ "mcpterm-tui",
+ "tokio",
+]
+
+[[package]]
 name = "mcp-core"
 version = "0.1.0"
 dependencies = [
