@@ -259,7 +259,16 @@ impl ResponseFormatter {
 
 /// Format LLM responses to enhance readability
 pub fn format_llm_response(content: &str) -> String {
-    // For now, simply pass through the response content
-    // In the future, we could add formatting for markdown, code blocks, etc.
+    // Clean up any JSON if it was accidentally passed through
+    if content.trim().starts_with('{') && content.trim().ends_with('}') {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
+            // If it's JSON, try to extract text content
+            if let Some(text) = parsed.get("content").and_then(|v| v.as_str()) {
+                return text.to_string();
+            }
+        }
+    }
+    
+    // Return the content directly - it's already text
     content.to_string()
 }

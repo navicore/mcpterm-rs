@@ -15,7 +15,7 @@ use std::fmt::Write as FmtWrite;
 use std::sync::Arc;
 use tracing::{debug, error, info, trace, warn};
 
-use crate::formatter::ResponseFormatter;
+use crate::formatter::{ResponseFormatter, format_llm_response};
 
 // ========== Helper structs ==========
 
@@ -339,7 +339,9 @@ impl CliApp {
         stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
     ) -> Result<String> {
         debug_log("Stream response received, processing chunks");
-        println!("Response: ");
+        
+        // Show a subtle indicator that we're receiving a response
+        println!(); // Start with a clean line
 
         // Track if we've received any content at all
         let mut received_content = false;
@@ -451,7 +453,7 @@ impl CliApp {
         &self,
         follow_up_stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
     ) -> Result<FollowUpResponse> {
-        println!("Response: ");
+        println!(); // Start with a clean line
         let mut follow_up_content = String::new();
 
         while let Some(follow_up_chunk_result) = follow_up_stream.next().await {
@@ -540,7 +542,7 @@ impl CliApp {
         &self,
         retry_stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
     ) -> Result<String> {
-        println!("Response: ");
+        println!(); // Start with a clean line
         let mut retry_content = String::new();
 
         while let Some(retry_chunk_result) = retry_stream.next().await {
@@ -603,8 +605,9 @@ impl CliApp {
             return self.get_non_streaming_follow_up().await;
         }
 
-        // No tool calls, just return the response
-        println!("Response: {}", response.content);
+        // No tool calls, just return the formatted response
+        let formatted_response = format_llm_response(&response.content);
+        println!("{}", formatted_response);
         debug_log("Request completed successfully");
         Ok(response.content)
     }
@@ -686,8 +689,9 @@ impl CliApp {
 
             self.context.add_assistant_message(&retry_response.content);
 
-            // Print and return the retry response
-            println!("Response: {}", retry_response.content);
+            // Format and print the retry response
+            let formatted_response = format_llm_response(&retry_response.content);
+            println!("{}", formatted_response);
             debug!("Tool call flow completed successfully with retry");
             Ok(retry_response.content)
         } else {
@@ -698,8 +702,8 @@ impl CliApp {
 
             self.context.add_assistant_message(&fallback_message);
 
-            // Print and return the fallback message
-            println!("Response: {}", fallback_message);
+            // Format and print the fallback message
+            println!("{}", fallback_message);
             debug!("Tool call flow completed with intelligent fallback message");
             Ok(fallback_message)
         }
@@ -723,8 +727,9 @@ impl CliApp {
         // Sleep for a longer time to ensure all outputs are properly processed
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-        // Print and return the follow-up response
-        println!("Response: {}", content);
+        // Format and print the follow-up response
+        let formatted_response = format_llm_response(content);
+        println!("{}", formatted_response);
         debug!("Tool call flow completed successfully");
         Ok(content.to_string())
     }
