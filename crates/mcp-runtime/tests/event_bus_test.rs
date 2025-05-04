@@ -1,7 +1,5 @@
 use anyhow::Result;
-use mcp_runtime::{
-    create_handler, ApiEvent, EventBus, KeyCode, KeyEvent, KeyModifiers, ModelEvent, UiEvent,
-};
+use mcp_runtime::{create_handler, EventBus, KeyCode, KeyEvent, KeyModifiers, ModelEvent, UiEvent};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,

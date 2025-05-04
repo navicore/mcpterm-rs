@@ -1,6 +1,6 @@
 use anyhow::Result;
 use futures::StreamExt;
-use mcp_core::context::{ConversationContext, MessageRole};
+use mcp_core::context::ConversationContext;
 use mcp_llm::bedrock::{BedrockClient, BedrockConfig};
 use mcp_llm::client_trait::LlmClient;
 use mcp_llm::schema::McpSchemaManager;
@@ -189,7 +189,7 @@ async fn test_bedrock_tool_call_with_mcp() -> Result<()> {
     let client = BedrockClient::new(config).await?;
 
     // Create a schema validator
-    let schema_manager = McpSchemaManager::new();
+    let _schema_manager = McpSchemaManager::new();
 
     // Create a conversation context
     let mut context = ConversationContext::new();

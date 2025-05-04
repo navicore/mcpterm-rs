@@ -39,6 +39,7 @@ impl MockLlmClient {
         stream_responses.push(chunk);
     }
 
+    #[allow(dead_code)]
     fn get_last_context(&self) -> Option<ConversationContext> {
         let context = self.last_context.lock().unwrap();
         context.clone()
