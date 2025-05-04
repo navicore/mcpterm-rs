@@ -10,16 +10,19 @@ use mcp_tools::{
     ToolManager, ToolResult, ToolStatus,
 };
 use serde_json::Value;
-use std::io::Write;
+use std::io::Write as IoWrite;
 use std::sync::Arc;
 use tracing::{debug, error, info, trace, warn};
+
+use crate::formatter::{format_llm_response, ResponseFormatter};
 
 // ========== Helper structs ==========
 
 // Represents a tool execution result including the result or error
 struct FormattedToolResult {
-    status_str: String,
+    // The JSON-RPC formatted result string for adding to context
     formatted_result: String,
+    // The original tool result for display formatting
     original_result: ToolResult,
 }
 
@@ -29,7 +32,8 @@ struct FollowUpResponse {
     is_empty_or_tool_call: bool,
 }
 
-// Export our mock implementation for tests
+// Export our modules
+pub mod formatter;
 pub mod mock;
 
 pub struct CliApp {
@@ -334,12 +338,18 @@ impl CliApp {
         stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
     ) -> Result<String> {
         debug_log("Stream response received, processing chunks");
-        println!("Response: ");
+
+        // Show a subtle indicator that we're receiving a response
+        println!(); // Start with a clean line
 
         // Track if we've received any content at all
         let mut received_content = false;
         let mut response_content = String::new();
         let mut had_tool_call = false;
+
+        // Buffer to accumulate chunks until we know if they're part of a tool call
+        let mut content_buffer = String::new();
+        let mut is_current_buffer_tool_call = false;
 
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
@@ -349,17 +359,48 @@ impl CliApp {
 
                     if !chunk.content.is_empty() {
                         received_content = true;
-                        self.print_chunk_content(&chunk.content);
                         response_content.push_str(&chunk.content);
                         count!("llm.stream_chunks", 1);
+
+                        // Check if this content looks like a tool call JSON-RPC (do this before buffering)
+                        let content_is_likely_tool_call = chunk.content.contains("\"jsonrpc\"")
+                            && chunk.content.contains("\"method\"")
+                            && chunk.content.contains("\"mcp.tool_call\"");
+
+                        if content_is_likely_tool_call {
+                            // Mark as tool call preemptively to avoid displaying JSON-RPC
+                            is_current_buffer_tool_call = true;
+                        } else {
+                            // Add to buffer only if not a likely tool call
+                            content_buffer.push_str(&chunk.content);
+                        }
                     }
 
-                    // Handle tool call if present
+                    // Check if this chunk is marked as a tool call
                     if chunk.is_tool_call {
+                        is_current_buffer_tool_call = true;
                         had_tool_call = true;
+
+                        // Empty the buffer without printing, since it's a tool call
+                        content_buffer.clear();
+
                         if let Some(tool_call) = &chunk.tool_call {
                             self.handle_tool_call(tool_call).await?;
                         }
+                    }
+
+                    // If we have completed a chunk or this is the final chunk, process the buffer
+                    if chunk.is_complete
+                        || !is_current_buffer_tool_call && chunk.content.contains("\n")
+                    {
+                        // Only print if it's NOT part of a tool call
+                        if !is_current_buffer_tool_call && !content_buffer.is_empty() {
+                            self.print_chunk_content(&content_buffer);
+                            content_buffer.clear();
+                        }
+
+                        // Reset the flag for the next buffer
+                        is_current_buffer_tool_call = false;
                     }
 
                     // If this is the final chunk, we're done
@@ -396,7 +437,11 @@ impl CliApp {
     }
 
     fn print_chunk_content(&self, content: &str) {
-        print!("{}", content);
+        // Format the content to extract JSON-RPC result if present
+        let formatted_content = format_llm_response(content);
+
+        // Note: Colors class will automatically check if colors are supported
+        print!("{}", formatted_content);
         let _ = std::io::stdout().flush();
     }
 
@@ -446,14 +491,16 @@ impl CliApp {
         &self,
         follow_up_stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
     ) -> Result<FollowUpResponse> {
-        println!("Response: ");
+        println!(); // Start with a clean line
         let mut follow_up_content = String::new();
 
         while let Some(follow_up_chunk_result) = follow_up_stream.next().await {
             match follow_up_chunk_result {
                 Ok(follow_up_chunk) => {
                     if !follow_up_chunk.content.is_empty() {
-                        print!("{}", follow_up_chunk.content);
+                        // Format the content to extract JSON-RPC result if present
+                        let formatted_content = format_llm_response(&follow_up_chunk.content);
+                        print!("{}", formatted_content);
                         let _ = std::io::stdout().flush();
                         follow_up_content.push_str(&follow_up_chunk.content);
                     }
@@ -535,13 +582,15 @@ impl CliApp {
         &self,
         retry_stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
     ) -> Result<String> {
-        println!("Response: ");
+        println!(); // Start with a clean line
         let mut retry_content = String::new();
 
         while let Some(retry_chunk_result) = retry_stream.next().await {
             if let Ok(retry_chunk) = retry_chunk_result {
                 if !retry_chunk.content.is_empty() {
-                    print!("{}", retry_chunk.content);
+                    // Format the content to extract JSON-RPC result if present
+                    let formatted_content = format_llm_response(&retry_chunk.content);
+                    print!("{}", formatted_content);
                     let _ = std::io::stdout().flush();
                     retry_content.push_str(&retry_chunk.content);
                 }
@@ -598,8 +647,10 @@ impl CliApp {
             return self.get_non_streaming_follow_up().await;
         }
 
-        // No tool calls, just return the response
-        println!("Response: {}", response.content);
+        // No tool calls, just return the formatted response
+        trace!("Raw response content: {}", response.content);
+        let formatted_response = format_llm_response(&response.content);
+        println!("{}", formatted_response); // Print formatted response (uncommented)
         debug_log("Request completed successfully");
         Ok(response.content)
     }
@@ -681,8 +732,9 @@ impl CliApp {
 
             self.context.add_assistant_message(&retry_response.content);
 
-            // Print and return the retry response
-            println!("Response: {}", retry_response.content);
+            // Format and print the retry response
+            //let formatted_response = format_llm_response(&retry_response.content);
+            //println!("{}", formatted_response);
             debug!("Tool call flow completed successfully with retry");
             Ok(retry_response.content)
         } else {
@@ -693,8 +745,8 @@ impl CliApp {
 
             self.context.add_assistant_message(&fallback_message);
 
-            // Print and return the fallback message
-            println!("Response: {}", fallback_message);
+            // Format and print the fallback message
+            //println!("{}", fallback_message);
             debug!("Tool call flow completed with intelligent fallback message");
             Ok(fallback_message)
         }
@@ -718,8 +770,9 @@ impl CliApp {
         // Sleep for a longer time to ensure all outputs are properly processed
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-        // Print and return the follow-up response
-        println!("Response: {}", content);
+        // Format and print the follow-up response
+        //let formatted_response = format_llm_response(content);
+        //println!("{}", formatted_response);
         debug!("Tool call flow completed successfully");
         Ok(content.to_string())
     }
@@ -750,12 +803,11 @@ impl CliApp {
                 // Process successful tool execution
                 let formatted = self.format_tool_result(result);
 
-                // Display the result to the user
-                println!("\n[Tool Result: {}]", formatted.status_str);
-                println!("Output: {}", formatted.original_result.output);
-                if let Some(err) = &formatted.original_result.error {
-                    println!("Error: {}", err);
-                }
+                // Just show a brief status indicator instead of the full result
+                println!(
+                    "\nProcessing {} command...",
+                    formatted.original_result.tool_id
+                );
 
                 // Add the tool result to the context
                 debug!(
@@ -765,7 +817,7 @@ impl CliApp {
 
                 // Log tool result at trace level for detailed debugging
                 trace!(
-                    "Tool execution result full JSON-RPC response: {}",
+                    ">>> TOOL RESULT JSON-RPC TO LLM >>>\n{}",
                     serde_json::to_string_pretty(&formatted.original_result).unwrap_or_default()
                 );
 
@@ -777,8 +829,9 @@ impl CliApp {
             Err(e) => {
                 // Handle tool execution error
                 error!("Error executing tool: {}", e);
-                println!("\n[Tool Execution Error]");
-                println!("Failed to execute tool '{}': {}", tool_name, e);
+
+                // Just show a brief error indicator
+                println!("\nError processing {} command", tool_name);
 
                 // Format as a standard MCP error response using JSON-RPC 2.0
                 let error_result = format!(
@@ -794,13 +847,6 @@ impl CliApp {
     }
 
     fn format_tool_result(&self, result: ToolResult) -> FormattedToolResult {
-        // Get status string
-        let status_str = match result.status {
-            ToolStatus::Success => "SUCCESS",
-            ToolStatus::Failure => "FAILURE",
-            ToolStatus::Timeout => "TIMEOUT",
-        };
-
         // Format the result as JSON-RPC 2.0
         let output_json = serde_json::to_string(&result.output)
             .unwrap_or_else(|_| "\"Failed to serialize result\"".to_string());
@@ -812,7 +858,6 @@ impl CliApp {
         );
 
         FormattedToolResult {
-            status_str: status_str.to_string(),
             formatted_result,
             original_result: result,
         }
@@ -839,7 +884,13 @@ impl CliApp {
     }
 
     fn create_fallback_message(&self, tool_result_output: &str) -> String {
-        // Parse the tool result to extract meaningful information
+        // Try to use our fancy formatter to parse the JSON-RPC result
+        if let Some(formatted_output) = ResponseFormatter::extract_from_jsonrpc(tool_result_output)
+        {
+            return formatted_output;
+        }
+
+        // Fallback to basic formatting if our fancy formatter fails
         let parsed_result: Result<serde_json::Value, _> = serde_json::from_str(tool_result_output);
 
         match parsed_result {
