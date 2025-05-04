@@ -1,5 +1,5 @@
-use mcpterm_cli::formatter::ResponseFormatter;
 use mcp_tools::{ToolResult, ToolStatus};
+use mcpterm_cli::formatter::ResponseFormatter;
 use serde_json::json;
 
 fn main() {
@@ -15,7 +15,7 @@ fn main() {
         }),
         error: None,
     };
-    
+
     // Test file tool result
     let file_result = ToolResult {
         tool_id: "read_file".to_string(),
@@ -27,7 +27,7 @@ fn main() {
         }),
         error: None,
     };
-    
+
     // Test directory tool result
     let dir_result = ToolResult {
         tool_id: "list_directory".to_string(),
@@ -54,7 +54,7 @@ fn main() {
         }),
         error: None,
     };
-    
+
     // Test error result
     let error_result = ToolResult {
         tool_id: "shell".to_string(),
@@ -67,24 +67,24 @@ fn main() {
         }),
         error: Some("Command execution failed with exit code 127".to_string()),
     };
-    
+
     // Format and display each result
     println!("===== SHELL COMMAND RESULT =====");
     println!("{}", ResponseFormatter::format_tool_result(&shell_result));
-    
+
     println!("\n===== FILE READ RESULT =====");
     println!("{}", ResponseFormatter::format_tool_result(&file_result));
-    
+
     println!("\n===== DIRECTORY LISTING RESULT =====");
     println!("{}", ResponseFormatter::format_tool_result(&dir_result));
-    
+
     println!("\n===== ERROR RESULT =====");
     println!("{}", ResponseFormatter::format_tool_result(&error_result));
-    
+
     // Test JSON-RPC result parsing
     println!("\n===== JSON-RPC PARSING =====");
     let json_rpc_result = r#"{"jsonrpc": "2.0", "result": {"tool_id": "shell", "status": "success", "output": {"command": "echo hello", "exit_code": 0, "stdout": "hello\n", "stderr": ""}, "error": null}, "id": "tool_result"}"#;
-    
+
     if let Some(formatted) = ResponseFormatter::extract_from_jsonrpc(json_rpc_result) {
         println!("Parsed JSON-RPC result:\n{}", formatted);
     } else {

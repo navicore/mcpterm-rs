@@ -346,7 +346,7 @@ impl CliApp {
         let mut received_content = false;
         let mut response_content = String::new();
         let mut had_tool_call = false;
-        
+
         // Buffer to accumulate chunks until we know if they're part of a tool call
         let mut content_buffer = String::new();
         let mut is_current_buffer_tool_call = false;
@@ -361,12 +361,12 @@ impl CliApp {
                         received_content = true;
                         response_content.push_str(&chunk.content);
                         count!("llm.stream_chunks", 1);
-                        
+
                         // Check if this content looks like a tool call JSON-RPC (do this before buffering)
-                        let content_is_likely_tool_call = chunk.content.contains("\"jsonrpc\"") && 
-                                                        chunk.content.contains("\"method\"") && 
-                                                        chunk.content.contains("\"mcp.tool_call\"");
-                        
+                        let content_is_likely_tool_call = chunk.content.contains("\"jsonrpc\"")
+                            && chunk.content.contains("\"method\"")
+                            && chunk.content.contains("\"mcp.tool_call\"");
+
                         if content_is_likely_tool_call {
                             // Mark as tool call preemptively to avoid displaying JSON-RPC
                             is_current_buffer_tool_call = true;
@@ -380,23 +380,25 @@ impl CliApp {
                     if chunk.is_tool_call {
                         is_current_buffer_tool_call = true;
                         had_tool_call = true;
-                        
+
                         // Empty the buffer without printing, since it's a tool call
                         content_buffer.clear();
-                        
+
                         if let Some(tool_call) = &chunk.tool_call {
                             self.handle_tool_call(tool_call).await?;
                         }
                     }
-                    
+
                     // If we have completed a chunk or this is the final chunk, process the buffer
-                    if chunk.is_complete || (is_current_buffer_tool_call == false && chunk.content.contains("\n")) {
+                    if chunk.is_complete
+                        || (is_current_buffer_tool_call == false && chunk.content.contains("\n"))
+                    {
                         // Only print if it's NOT part of a tool call
                         if !is_current_buffer_tool_call && !content_buffer.is_empty() {
                             self.print_chunk_content(&content_buffer);
                             content_buffer.clear();
                         }
-                        
+
                         // Reset the flag for the next buffer
                         is_current_buffer_tool_call = false;
                     }
@@ -437,7 +439,7 @@ impl CliApp {
     fn print_chunk_content(&self, content: &str) {
         // Format the content to extract JSON-RPC result if present
         let formatted_content = format_llm_response(content);
-        
+
         // Note: Colors class will automatically check if colors are supported
         print!("{}", formatted_content);
         let _ = std::io::stdout().flush();
@@ -648,7 +650,7 @@ impl CliApp {
         // No tool calls, just return the formatted response
         trace!("Raw response content: {}", response.content);
         let formatted_response = format_llm_response(&response.content);
-        println!("{}", formatted_response);  // Print formatted response (uncommented)
+        println!("{}", formatted_response); // Print formatted response (uncommented)
         debug_log("Request completed successfully");
         Ok(response.content)
     }
