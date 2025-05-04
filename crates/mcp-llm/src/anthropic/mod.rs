@@ -26,6 +26,7 @@ impl AnthropicConfig {
     }
 }
 
+#[allow(dead_code)]
 pub struct AnthropicClient {
     config: AnthropicConfig,
     // HTTP client will be added here

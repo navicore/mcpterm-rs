@@ -10,6 +10,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{debug, info};
 
+#[allow(dead_code)]
 pub struct App {
     pub state: AppState,
     event_handler: EventHandler,

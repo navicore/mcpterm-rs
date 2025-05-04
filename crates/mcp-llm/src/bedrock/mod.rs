@@ -178,6 +178,7 @@ struct ClaudeUsage {
 pub struct BedrockClient {
     client: BedrockRuntimeClient,
     config: BedrockConfig,
+    #[allow(dead_code)]
     schema_manager: McpSchemaManager,
     prompt_manager: PromptManager,
     active_requests: RequestMap,

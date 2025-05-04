@@ -32,6 +32,7 @@ pub trait Resource {
     fn delete(&mut self) -> Result<()>;
 }
 
+#[allow(dead_code)]
 pub struct ResourceManager {
     base_dir: PathBuf,
     // Additional fields will be added in the implementation
