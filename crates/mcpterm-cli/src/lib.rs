@@ -9,6 +9,7 @@ use mcp_tools::{
     filesystem::{FilesystemConfig, ListDirectoryTool, ReadFileTool, WriteFileTool},
     search::{FindConfig, FindTool, GrepConfig, GrepTool},
     shell::{ShellConfig, ShellTool},
+    testing::TestRunnerTool,
     ToolManager, ToolResult, ToolStatus,
 };
 use serde_json::Value;
@@ -157,6 +158,10 @@ impl CliApp {
         // Register language analyzer tool
         let language_analyzer = LanguageAnalyzerTool::new();
         tool_manager.register_tool(Box::new(language_analyzer));
+
+        // Register test runner tool
+        let test_runner = TestRunnerTool::new();
+        tool_manager.register_tool(Box::new(test_runner));
 
         Self {
             context: ConversationContext::new(),
