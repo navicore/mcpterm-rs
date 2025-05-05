@@ -10,6 +10,7 @@ pub mod filesystem;
 pub mod registry;
 pub mod search;
 pub mod shell;
+pub mod testing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolCategory {

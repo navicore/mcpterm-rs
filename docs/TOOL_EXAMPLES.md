@@ -452,6 +452,79 @@ Example response:
 }
 ```
 
+## Test Runner Tool
+
+The `test_runner` tool runs tests in a project and analyzes test results. It automatically detects the test framework based on the project structure.
+
+### Example 1: Run tests in a Rust project
+
+```json
+{
+  "tool": "test_runner",
+  "params": {
+    "path": "/path/to/rust/project"
+  }
+}
+```
+
+### Example 2: Run specific tests with a filter
+
+```json
+{
+  "tool": "test_runner",
+  "params": {
+    "path": "/path/to/node/project",
+    "test_filter": "auth"
+  }
+}
+```
+
+### Example 3: Run tests with a specific framework and timeout
+
+```json
+{
+  "tool": "test_runner",
+  "params": {
+    "path": "/path/to/python/project",
+    "framework": "Pytest",
+    "timeout_seconds": 120
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "tool_id": "test_runner",
+  "status": "success",
+  "result": {
+    "status": "Passed",
+    "framework": "Rust",
+    "total": 15,
+    "passed": 15,
+    "failed": 0,
+    "skipped": 0,
+    "duration_ms": 1250,
+    "tests": [
+      {
+        "name": "tests::test_parse_config",
+        "status": "Passed",
+        "duration_ms": 4,
+        "message": null
+      },
+      {
+        "name": "tests::test_validate_settings",
+        "status": "Passed",
+        "duration_ms": 2,
+        "message": null
+      }
+    ],
+    "raw_output": "running 15 tests\ntest tests::test_parse_config ... ok\ntest tests::test_validate_settings ... ok\n..."
+  }
+}
+```
+
 ## Safety Considerations
 
 ### Path Safety
