@@ -344,6 +344,114 @@ Example response:
 }
 ```
 
+## Language Analyzer Tool
+
+The `code_analyzer` tool performs language-specific code analysis to help understand code structure, definitions, imports, and symbol usages.
+
+### Example 1: Analyze a file
+
+```json
+{
+  "tool": "code_analyzer",
+  "params": {
+    "file": "/path/to/source/file.rs",
+    "analysis_type": "comprehensive",
+    "detail_level": "medium"
+  }
+}
+```
+
+### Example 2: Analyze code string with specific language
+
+```json
+{
+  "tool": "code_analyzer",
+  "params": {
+    "code": "function hello() {\n  console.log('Hello world');\n}\n\nhello();",
+    "language": "javascript",
+    "analysis_type": "definitions",
+    "detail_level": "high"
+  }
+}
+```
+
+### Example 3: Find imports in a Python file
+
+```json
+{
+  "tool": "code_analyzer",
+  "params": {
+    "file": "/path/to/script.py",
+    "analysis_type": "imports"
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "tool_id": "code_analyzer",
+  "status": "success",
+  "result": {
+    "language": "Rust",
+    "file_path": "/path/to/source/file.rs",
+    "definitions": [
+      {
+        "def_type": "function",
+        "name": "parse_config",
+        "line": 42,
+        "column": null,
+        "args": ["path: &Path", "default: Option<Config>"],
+        "return_type": "Result<Config, ConfigError>",
+        "visibility": "public",
+        "doc_comment": "Parse a configuration file from the given path.",
+        "full_text": null
+      },
+      {
+        "def_type": "struct",
+        "name": "Config",
+        "line": 15,
+        "column": null,
+        "args": null,
+        "return_type": null,
+        "visibility": "public",
+        "doc_comment": "Configuration settings for the application.",
+        "full_text": null
+      }
+    ],
+    "imports": [
+      {
+        "module": "std::fs",
+        "line": 1,
+        "column": null,
+        "alias": null,
+        "items": null,
+        "full_text": "use std::fs;"
+      },
+      {
+        "module": "serde",
+        "line": 2,
+        "column": null,
+        "alias": null,
+        "items": ["Deserialize", "Serialize"],
+        "full_text": "use serde::{Deserialize, Serialize};"
+      }
+    ],
+    "usages": [
+      {
+        "name": "Config",
+        "line": 47,
+        "column": 12,
+        "context": "    let config: Config = serde_json::from_str(&contents)?;",
+        "usage_type": "reference"
+      }
+    ],
+    "messages": []
+  }
+}
+```
+
 ## Safety Considerations
 
 ### Path Safety
