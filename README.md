@@ -65,6 +65,27 @@ For CLI mode:
 cargo run -p mcpterm-cli
 ```
 
+For interactive CLI mode with slash commands:
+
+```bash
+cargo run -p mcpterm-cli -- -I
+```
+
+### Local Slash Commands
+
+The CLI supports local slash commands in interactive mode for debugging and inspecting MCP tools. These commands are processed directly by the application, not sent to the LLM:
+
+```bash
+/mcp list                # List all available tools
+/mcp show <tool_id>      # Show details and JSON schema for a tool
+/mcp schema              # Show JSON-RPC schemas for the MCP protocol
+/mcp help                # Show help for slash commands
+```
+
+Local slash commands give you direct access to tool information from the source of truth - your mcpterm implementation.
+
+See [SLASH_COMMANDS.md](./docs/SLASH_COMMANDS.md) for more details.
+
 ## Development
 
 Each crate has its own README, tests, and example usage in its directory. The implementation follows a test-driven approach.

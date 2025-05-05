@@ -70,6 +70,61 @@ pub struct Cli {
     yes: bool,
 }
 
+/// Handle slash commands for the CLI
+async fn handle_slash_command(app: &mut CliApp, input: &str) {
+    // Log that we're handling this locally
+    debug!(
+        "Handling slash command locally (not sending to LLM): {}",
+        input
+    );
+
+    // Get the slash command handler
+    let handler = app.get_slash_command_handler();
+
+    // Parse the command
+    let parts: Vec<&str> = input.split_whitespace().collect();
+    if parts.is_empty() {
+        return;
+    }
+
+    // Extract the command name without the slash
+    let command_name = parts[0].trim_start_matches('/');
+
+    // Check if this handler can process this command
+    if command_name != handler.name() {
+        println!("Unknown command: /{}", command_name);
+        println!("Currently supported commands: /mcp");
+        return;
+    }
+
+    // Execute the command with args
+    let args = &parts[1..];
+    let result = handler.execute(args);
+
+    // Display the result
+    match result.status {
+        mcp_core::CommandStatus::Success => {
+            if let Some(content) = result.content {
+                println!("{}", content);
+            }
+        }
+        mcp_core::CommandStatus::Error => {
+            if let Some(error) = result.error {
+                println!("Error: {}", error);
+            } else {
+                println!("Command failed with unknown error");
+            }
+        }
+        mcp_core::CommandStatus::NeedsMoreInfo => {
+            if let Some(content) = result.content {
+                println!("{}", content);
+            } else {
+                println!("More information needed for this command");
+            }
+        }
+    }
+}
+
 pub async fn main() -> Result<()> {
     // Parse command line arguments
     let cli = Cli::parse();
@@ -186,12 +241,20 @@ pub async fn main() -> Result<()> {
         // 4. Error if none of the above
         if let Some(prompt) = cli.prompt {
             debug!("Processing single prompt from command line argument");
-            let _response = app.run(&prompt).await?;
-            // Response is already printed in app.run
 
-            // Add a deliberate delay for tool responses
-            debug!("Waiting for any follow-up responses...");
-            sleep(Duration::from_secs(3)).await;
+            // Check if this is a slash command
+            if prompt.starts_with('/') {
+                debug!("Handling slash command: {}", prompt);
+                handle_slash_command(&mut app, &prompt).await;
+            } else {
+                // Not a slash command, send to LLM
+                let _response = app.run(&prompt).await?;
+                // Response is already printed in app.run
+
+                // Add a deliberate delay for tool responses
+                debug!("Waiting for any follow-up responses...");
+                sleep(Duration::from_secs(3)).await;
+            }
 
             // Add some diagnostic logs to help debug tool response issues
             debug!(
@@ -214,7 +277,14 @@ pub async fn main() -> Result<()> {
             if !input.trim().is_empty() {
                 println!("Processing prompt ({} characters)...", input.len());
                 debug!("Processing prompt from stdin, length: {}", input.len());
-                let _response = app.run(&input).await?;
+
+                // Check if this is a slash command
+                if input.trim().starts_with('/') {
+                    debug!("Handling slash command from stdin: {}", input);
+                    handle_slash_command(&mut app, input.trim()).await;
+                } else {
+                    let _response = app.run(&input).await?;
+                }
 
                 // Add a deliberate delay for tool responses
                 debug!("Waiting for any follow-up responses...");
@@ -271,6 +341,14 @@ async fn run_interactive_mode(app: &mut CliApp) -> Result<()> {
             break;
         }
 
+        // Handle any slash commands locally
+        if input.starts_with('/') {
+            // Process these commands locally instead of sending to the LLM
+            handle_slash_command(app, input).await;
+            continue; // Skip sending to LLM
+        }
+
+        // For all other input, send to the LLM
         match app.run(input).await {
             Ok(_) => {
                 // Add a short delay for tool responses in interactive mode
@@ -318,6 +396,13 @@ async fn process_input_file(
     // Process each prompt
     for (i, prompt) in prompts.iter().enumerate() {
         println!("Processing prompt {} of {}", i + 1, prompts.len());
+
+        // Check if this is a slash command
+        if prompt.starts_with('/') {
+            println!("Handling slash command: {}", prompt);
+            handle_slash_command(app, prompt).await;
+            continue;
+        }
 
         match app.run(prompt).await {
             Ok(response) => {

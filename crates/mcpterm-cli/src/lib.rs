@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
 use futures::{Stream, StreamExt};
+use mcp_core::commands::mcp::{ToolInfo, ToolProvider};
 use mcp_core::context::{ConversationContext, MessageRole};
-use mcp_core::{api_log, debug_log};
+use mcp_core::{api_log, debug_log, McpCommand, SlashCommand};
 use mcp_llm::{BedrockClient, BedrockConfig, LlmClient, StreamChunk};
 use mcp_metrics::{count, gauge, time};
 use mcp_tools::{
@@ -10,7 +11,7 @@ use mcp_tools::{
     search::{FindConfig, FindTool, GrepConfig, GrepTool},
     shell::{ShellConfig, ShellTool},
     testing::TestRunnerTool,
-    ToolManager, ToolResult, ToolStatus,
+    ToolManager, ToolMetadata, ToolResult, ToolStatus,
 };
 use serde_json::Value;
 use std::io::Write as IoWrite;
@@ -47,7 +48,7 @@ pub struct CliApp {
     tool_manager: ToolManager,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CliConfig {
     pub model: String,
     pub use_mcp: bool,
@@ -405,14 +406,62 @@ impl CliApp {
             }
         });
 
-        // Add the full response to the conversation
-        self.context.add_assistant_message(&response_content);
+        // Validate the response before adding it to the conversation
+        let validation_result = mcp_core::validate_llm_response(&response_content);
 
-        // Return the complete response
-        Ok(response_content)
+        // Track validation metrics
+        match &validation_result {
+            mcp_core::ValidationResult::Valid(_) => {
+                count!("llm.responses.valid", 1);
+            }
+            mcp_core::ValidationResult::InvalidFormat(_) => {
+                count!("llm.responses.invalid_format", 1);
+            }
+            mcp_core::ValidationResult::Mixed { .. } => {
+                count!("llm.responses.mixed", 1);
+            }
+            mcp_core::ValidationResult::NotJsonRpc(_) => {
+                count!("llm.responses.not_jsonrpc", 1);
+            }
+        }
+
+        match validation_result {
+            mcp_core::ValidationResult::Valid(_) => {
+                // Valid JSON-RPC, add to conversation as normal
+                self.context.add_assistant_message(&response_content);
+                Ok(response_content)
+            }
+            _ => {
+                // Invalid format, create a correction prompt
+                let correction = mcp_core::create_correction_prompt(&validation_result);
+                warn!("LLM response is not valid JSON-RPC, sending correction prompt");
+                debug!("Correction prompt: {}", correction);
+
+                // Add the invalid response to the conversation for reference (marked as invalid)
+                let invalid_marker = format!("INVALID FORMAT: {}", response_content);
+                self.context.add_assistant_message(&invalid_marker);
+
+                // Add our correction prompt
+                self.context.add_user_message(&correction);
+
+                // Get a corrected response
+                let corrected_response = self.get_corrected_response().await?;
+
+                // Return the corrected response
+                Ok(corrected_response)
+            }
+        }
     }
 
+    // Box the future to avoid recursion issues in async functions
     async fn process_streaming_response(
+        &mut self,
+        stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
+    ) -> Result<String> {
+        Box::pin(self._process_streaming_response(stream)).await
+    }
+
+    async fn _process_streaming_response(
         &mut self,
         stream: &mut Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>,
     ) -> Result<String> {
@@ -549,6 +598,41 @@ impl CliApp {
                 let follow_up = self
                     .collect_streaming_follow_up(&mut follow_up_stream)
                     .await?;
+
+                // Validate the streaming follow-up response
+                let validation_result = mcp_core::validate_llm_response(&follow_up.content);
+
+                // Track validation metrics for streaming follow-up responses
+                match &validation_result {
+                    mcp_core::ValidationResult::Valid(_) => {
+                        count!("llm.streaming_follow_up_responses.valid", 1);
+                    }
+                    mcp_core::ValidationResult::InvalidFormat(_) => {
+                        count!("llm.streaming_follow_up_responses.invalid_format", 1);
+                    }
+                    mcp_core::ValidationResult::Mixed { .. } => {
+                        count!("llm.streaming_follow_up_responses.mixed", 1);
+                    }
+                    mcp_core::ValidationResult::NotJsonRpc(_) => {
+                        count!("llm.streaming_follow_up_responses.not_jsonrpc", 1);
+                    }
+                }
+
+                // If follow-up is not valid JSON-RPC, send a correction prompt
+                if !matches!(validation_result, mcp_core::ValidationResult::Valid(_)) {
+                    warn!("Streaming follow-up response is not valid JSON-RPC, sending correction prompt");
+                    let correction = mcp_core::create_correction_prompt(&validation_result);
+
+                    // Add the invalid response to the conversation for reference
+                    let invalid_marker = format!("INVALID FORMAT: {}", follow_up.content);
+                    self.context.add_assistant_message(&invalid_marker);
+
+                    // Add our correction prompt
+                    self.context.add_user_message(&correction);
+
+                    // Get a corrected response
+                    return self.get_corrected_response().await;
+                }
 
                 // Check if the follow-up content is empty or contains another tool call
                 if follow_up.is_empty_or_tool_call {
@@ -725,26 +809,68 @@ impl CliApp {
             }
         });
 
-        // Add the response to the conversation
-        debug_log("Adding assistant message to conversation");
-        self.context.add_assistant_message(&response.content);
+        // Validate the response before adding it to the conversation
+        let validation_result = mcp_core::validate_llm_response(&response.content);
 
-        // Handle tool calls if any
-        if !response.tool_calls.is_empty() {
-            // Process and handle tool calls
-            self.handle_non_streaming_tool_calls(&response.tool_calls)
-                .await?;
-
-            // Get a follow-up response after tool execution
-            return self.get_non_streaming_follow_up().await;
+        // Track validation metrics
+        match &validation_result {
+            mcp_core::ValidationResult::Valid(_) => {
+                count!("llm.responses.valid", 1);
+            }
+            mcp_core::ValidationResult::InvalidFormat(_) => {
+                count!("llm.responses.invalid_format", 1);
+            }
+            mcp_core::ValidationResult::Mixed { .. } => {
+                count!("llm.responses.mixed", 1);
+            }
+            mcp_core::ValidationResult::NotJsonRpc(_) => {
+                count!("llm.responses.not_jsonrpc", 1);
+            }
         }
 
-        // No tool calls, just return the formatted response
-        trace!("Raw response content: {}", response.content);
-        let formatted_response = format_llm_response(&response.content);
-        println!("{}", formatted_response); // Print formatted response (uncommented)
-        debug_log("Request completed successfully");
-        Ok(response.content)
+        match validation_result {
+            mcp_core::ValidationResult::Valid(_) => {
+                // Valid JSON-RPC, add to conversation as normal
+                debug_log("Response is valid JSON-RPC");
+                self.context.add_assistant_message(&response.content);
+
+                // Handle tool calls if any
+                if !response.tool_calls.is_empty() {
+                    // Process and handle tool calls
+                    self.handle_non_streaming_tool_calls(&response.tool_calls)
+                        .await?;
+
+                    // Get a follow-up response after tool execution
+                    return self.get_non_streaming_follow_up().await;
+                }
+
+                // No tool calls, just return the formatted response
+                trace!("Raw response content: {}", response.content);
+                let formatted_response = format_llm_response(&response.content);
+                println!("{}", formatted_response); // Print formatted response
+                debug_log("Request completed successfully");
+                Ok(response.content)
+            }
+            _ => {
+                // Invalid format, create a correction prompt
+                let correction = mcp_core::create_correction_prompt(&validation_result);
+                warn!("LLM response is not valid JSON-RPC, sending correction prompt");
+                debug!("Correction prompt: {}", correction);
+
+                // Add the invalid response to the conversation for reference (marked as invalid)
+                let invalid_marker = format!("INVALID FORMAT: {}", response.content);
+                self.context.add_assistant_message(&invalid_marker);
+
+                // Add our correction prompt
+                self.context.add_user_message(&correction);
+
+                // Get a corrected response
+                let corrected_response = self.get_corrected_response().await?;
+
+                // Return the corrected response
+                Ok(corrected_response)
+            }
+        }
     }
 
     async fn handle_non_streaming_tool_calls(
@@ -781,18 +907,62 @@ impl CliApp {
         let client = self.llm_client.as_ref().unwrap();
         let follow_up_response = client.send_message(&self.context).await?;
 
-        // Check if the follow-up content is empty or contains another tool call
-        if follow_up_response.content.trim().is_empty()
-            || follow_up_response.content.contains("mcp.tool_call")
-        {
-            debug!("FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying...");
+        // Validate the follow-up response
+        let validation_result = mcp_core::validate_llm_response(&follow_up_response.content);
 
-            // Handle problematic follow-up response
-            self.handle_problematic_non_streaming_follow_up().await
-        } else {
-            // We have a valid non-empty follow-up response
-            self.handle_successful_non_streaming_follow_up(&follow_up_response.content)
-                .await
+        // Track validation metrics for follow-up responses
+        match &validation_result {
+            mcp_core::ValidationResult::Valid(_) => {
+                count!("llm.follow_up_responses.valid", 1);
+            }
+            mcp_core::ValidationResult::InvalidFormat(_) => {
+                count!("llm.follow_up_responses.invalid_format", 1);
+            }
+            mcp_core::ValidationResult::Mixed { .. } => {
+                count!("llm.follow_up_responses.mixed", 1);
+            }
+            mcp_core::ValidationResult::NotJsonRpc(_) => {
+                count!("llm.follow_up_responses.not_jsonrpc", 1);
+            }
+        }
+
+        match validation_result {
+            mcp_core::ValidationResult::Valid(_) => {
+                // Check if the follow-up content is empty or contains another tool call
+                if follow_up_response.content.trim().is_empty()
+                    || follow_up_response.content.contains("mcp.tool_call")
+                {
+                    debug!(
+                        "FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying..."
+                    );
+
+                    // Handle problematic follow-up response
+                    self.handle_problematic_non_streaming_follow_up().await
+                } else {
+                    // We have a valid non-empty follow-up response
+                    self.handle_successful_non_streaming_follow_up(&follow_up_response.content)
+                        .await
+                }
+            }
+            _ => {
+                // Invalid format, create a correction prompt
+                let correction = mcp_core::create_correction_prompt(&validation_result);
+                warn!("Follow-up response is not valid JSON-RPC, sending correction prompt");
+                debug!("Correction prompt: {}", correction);
+
+                // Add the invalid response to the conversation for reference (marked as invalid)
+                let invalid_marker = format!("INVALID FORMAT: {}", follow_up_response.content);
+                self.context.add_assistant_message(&invalid_marker);
+
+                // Add our correction prompt
+                self.context.add_user_message(&correction);
+
+                // Get a corrected response
+                let corrected_response = self.get_corrected_response().await?;
+
+                // Return the corrected response
+                Ok(corrected_response)
+            }
         }
     }
 
@@ -975,6 +1145,165 @@ impl CliApp {
         )
     }
 
+    // ========== Validation and correction functions ==========
+
+    /// Get a corrected response from the LLM after validation failure
+    async fn get_corrected_response(&mut self) -> Result<String> {
+        Box::pin(self._get_corrected_response()).await
+    }
+
+    async fn _get_corrected_response(&mut self) -> Result<String> {
+        // Record metrics for correction attempt
+        count!("llm.responses.correction_attempts", 1);
+
+        // Use either streaming or non-streaming based on config
+        if self.config.streaming {
+            self.get_corrected_streaming_response().await
+        } else {
+            self.get_corrected_non_streaming_response().await
+        }
+    }
+
+    /// Get a corrected streaming response
+    async fn get_corrected_streaming_response(&mut self) -> Result<String> {
+        debug!("Getting corrected streaming response");
+        let client = self.llm_client.as_ref().unwrap();
+
+        // Send the correction request
+        let stream_result = client.stream_message(&self.context).await;
+
+        match stream_result {
+            Ok(mut stream) => {
+                // Process the streaming response
+                let corrected_content = self.process_streaming_response(&mut stream).await?;
+
+                // Validate the corrected response
+                let validation_result = mcp_core::validate_llm_response(&corrected_content);
+
+                match validation_result {
+                    mcp_core::ValidationResult::Valid(_) => {
+                        // Success! Valid JSON-RPC
+                        debug!("Corrected response is valid JSON-RPC");
+                        count!("llm.responses.corrections_successful", 1);
+                        self.context.add_assistant_message(&corrected_content);
+                        Ok(corrected_content)
+                    }
+                    _ => {
+                        // Still invalid after correction attempt
+                        warn!("Correction attempt failed, response is still not valid JSON-RPC");
+                        count!("llm.responses.corrections_failed", 1);
+
+                        // Create a simple valid JSON-RPC response as fallback
+                        let fallback = self.create_fallback_jsonrpc_response(&corrected_content);
+                        debug!("Using fallback JSON-RPC response: {}", fallback);
+                        self.context.add_assistant_message(&fallback);
+                        Ok(fallback)
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Error getting corrected response: {}", e);
+                count!("llm.responses.corrections_failed", 1);
+
+                // Create a simple valid JSON-RPC response as fallback
+                let fallback = r#"{"jsonrpc":"2.0","result":"I apologize, but I had an issue processing your request properly. Could you please try again?","id":"error_recovery"}"#.to_string();
+                self.context.add_assistant_message(&fallback);
+                Ok(fallback)
+            }
+        }
+    }
+
+    /// Get a corrected non-streaming response
+    async fn get_corrected_non_streaming_response(&mut self) -> Result<String> {
+        debug!("Getting corrected non-streaming response");
+        let client = self.llm_client.as_ref().unwrap();
+
+        // Send the correction request
+        match client.send_message(&self.context).await {
+            Ok(response) => {
+                // Validate the corrected response
+                let validation_result = mcp_core::validate_llm_response(&response.content);
+
+                match validation_result {
+                    mcp_core::ValidationResult::Valid(_) => {
+                        // Success! Valid JSON-RPC
+                        debug!("Corrected response is valid JSON-RPC");
+                        count!("llm.responses.corrections_successful", 1);
+                        self.context.add_assistant_message(&response.content);
+
+                        // Handle any tool calls in the corrected response
+                        if !response.tool_calls.is_empty() {
+                            self.handle_non_streaming_tool_calls(&response.tool_calls)
+                                .await?;
+
+                            // Get a follow-up response if we had tool calls
+                            return self.get_non_streaming_follow_up().await;
+                        }
+
+                        Ok(response.content)
+                    }
+                    _ => {
+                        // Still invalid after correction attempt
+                        warn!("Correction attempt failed, response is still not valid JSON-RPC");
+                        count!("llm.responses.corrections_failed", 1);
+
+                        // Create a simple valid JSON-RPC response as fallback
+                        let fallback = self.create_fallback_jsonrpc_response(&response.content);
+                        debug!("Using fallback JSON-RPC response: {}", fallback);
+                        self.context.add_assistant_message(&fallback);
+                        Ok(fallback)
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Error getting corrected response: {}", e);
+                count!("llm.responses.corrections_failed", 1);
+
+                // Create a simple valid JSON-RPC response as fallback
+                let fallback = r#"{"jsonrpc":"2.0","result":"I apologize, but I had an issue processing your request properly. Could you please try again?","id":"error_recovery"}"#.to_string();
+                self.context.add_assistant_message(&fallback);
+                Ok(fallback)
+            }
+        }
+    }
+
+    /// Create a fallback JSON-RPC response when correction fails
+    fn create_fallback_jsonrpc_response(&self, invalid_content: &str) -> String {
+        // Try to extract any readable text to include in the response
+        let extracted_text =
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(invalid_content) {
+                // Extract text from JSON value if possible
+                if let Some(text) = json.as_str() {
+                    text.to_string()
+                } else if let Some(text_obj) = json.get("result") {
+                    if let Some(text) = text_obj.as_str() {
+                        text.to_string()
+                    } else {
+                        serde_json::to_string(text_obj).unwrap_or_else(|_| text_obj.to_string())
+                    }
+                } else {
+                    // Use the whole JSON as string
+                    serde_json::to_string(&json).unwrap_or_else(|_| json.to_string())
+                }
+            } else {
+                // Not valid JSON, use as text but trim it
+                let content = invalid_content.trim();
+
+                // Limit to a reasonable length
+                if content.len() > 200 {
+                    format!("{}...", &content[..200])
+                } else {
+                    content.to_string()
+                }
+            };
+
+        // Create a valid JSON-RPC response with the extracted content
+        format!(
+            r#"{{"jsonrpc":"2.0","result":"{}","id":"fallback_response"}}"#,
+            extracted_text.replace('"', "\\\"")
+        )
+    }
+
     fn create_fallback_message(&self, tool_result_output: &str) -> String {
         // Try to use our fancy formatter to parse the JSON-RPC result
         if let Some(formatted_output) = ResponseFormatter::extract_from_jsonrpc(tool_result_output)
@@ -1017,6 +1346,9 @@ impl Default for CliApp {
     }
 }
 
+// We now use CliToolProvider instead of implementing ToolProvider directly on CliApp
+// This avoids the need to clone the entire app
+
 // Debug helpers
 impl CliApp {
     // Get the current conversation context size
@@ -1045,5 +1377,49 @@ impl CliApp {
 
         // Return comma-separated roles
         roles.join(", ")
+    }
+
+    /// Get a slash command handler for the CLI
+    pub fn get_slash_command_handler(&self) -> Box<dyn SlashCommand> {
+        // Create a custom tool provider rather than using the app itself
+        // This way we avoid the problematic cloning of the app
+        let tools = self.tool_manager.get_tools();
+        let tool_provider = CliToolProvider { tools };
+        Box::new(McpCommand::new(tool_provider))
+    }
+}
+
+/// A simple tool provider that doesn't require cloning the entire app
+struct CliToolProvider {
+    tools: Vec<ToolMetadata>,
+}
+
+impl ToolProvider for CliToolProvider {
+    fn get_tools(&self) -> Vec<ToolInfo> {
+        self.tools
+            .iter()
+            .map(|meta| ToolInfo {
+                id: meta.id.clone(),
+                name: meta.name.clone(),
+                description: meta.description.clone(),
+                category: format!("{:?}", meta.category),
+                input_schema: meta.input_schema.clone(),
+                output_schema: meta.output_schema.clone(),
+            })
+            .collect()
+    }
+
+    fn get_tool_details(&self, tool_id: &str) -> Option<ToolInfo> {
+        self.tools
+            .iter()
+            .find(|t| t.id == tool_id)
+            .map(|meta| ToolInfo {
+                id: meta.id.clone(),
+                name: meta.name.clone(),
+                description: meta.description.clone(),
+                category: format!("{:?}", meta.category),
+                input_schema: meta.input_schema.clone(),
+                output_schema: meta.output_schema.clone(),
+            })
     }
 }
