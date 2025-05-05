@@ -13,7 +13,8 @@ mod tests {
         // Run the app with a test prompt
         let result = app.run("test prompt").await.unwrap();
 
-        // Verify the response contains both the mock response and the input prompt
+        // Verify the response contains the JSON-RPC format with mock response
+        assert!(result.contains("jsonrpc"));
         assert!(result.contains("This is a mock LLM response"));
         assert!(result.contains("test prompt"));
     }
@@ -58,7 +59,8 @@ mod tests {
         // Run the app with a test prompt
         let result = app.run("stream test").await.unwrap();
 
-        // Verify the response contains the streamed content
+        // Verify the response contains the streamed content in JSON-RPC format
+        assert!(result.contains("jsonrpc"));
         assert!(result.contains("This is a streamed response"));
         assert!(result.contains("stream test"));
     }

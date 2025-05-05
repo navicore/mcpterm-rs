@@ -73,31 +73,34 @@ pub struct Cli {
 /// Handle slash commands for the CLI
 async fn handle_slash_command(app: &mut CliApp, input: &str) {
     // Log that we're handling this locally
-    debug!("Handling slash command locally (not sending to LLM): {}", input);
-    
+    debug!(
+        "Handling slash command locally (not sending to LLM): {}",
+        input
+    );
+
     // Get the slash command handler
     let handler = app.get_slash_command_handler();
-    
+
     // Parse the command
     let parts: Vec<&str> = input.split_whitespace().collect();
     if parts.is_empty() {
         return;
     }
-    
+
     // Extract the command name without the slash
     let command_name = parts[0].trim_start_matches('/');
-    
+
     // Check if this handler can process this command
     if command_name != handler.name() {
         println!("Unknown command: /{}", command_name);
         println!("Currently supported commands: /mcp");
         return;
     }
-    
+
     // Execute the command with args
     let args = &parts[1..];
     let result = handler.execute(args);
-    
+
     // Display the result
     match result.status {
         mcp_core::CommandStatus::Success => {
@@ -238,7 +241,7 @@ pub async fn main() -> Result<()> {
         // 4. Error if none of the above
         if let Some(prompt) = cli.prompt {
             debug!("Processing single prompt from command line argument");
-            
+
             // Check if this is a slash command
             if prompt.starts_with('/') {
                 debug!("Handling slash command: {}", prompt);
@@ -274,7 +277,7 @@ pub async fn main() -> Result<()> {
             if !input.trim().is_empty() {
                 println!("Processing prompt ({} characters)...", input.len());
                 debug!("Processing prompt from stdin, length: {}", input.len());
-                
+
                 // Check if this is a slash command
                 if input.trim().starts_with('/') {
                     debug!("Handling slash command from stdin: {}", input);
@@ -337,7 +340,7 @@ async fn run_interactive_mode(app: &mut CliApp) -> Result<()> {
         if input.eq_ignore_ascii_case("exit") || input.eq_ignore_ascii_case("quit") {
             break;
         }
-        
+
         // Handle any slash commands locally
         if input.starts_with('/') {
             // Process these commands locally instead of sending to the LLM

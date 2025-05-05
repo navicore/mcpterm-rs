@@ -14,4 +14,5 @@ pub use context::ConversationContext;
 pub use logging::tracing::{get_log_level, init_tracing};
 pub use logging::{api_log, debug_log, init_debug_log, set_verbose_logging, ui_log};
 pub use prompts::{PromptManager, PromptType};
-pub use protocol::{Error, Request, Response};
+pub use protocol::validation::{create_correction_prompt, validate_llm_response, ValidationResult};
+pub use protocol::{create_error_response, create_response, Error, Request, Response};

@@ -12,6 +12,7 @@ pub struct MockLlmClient {
     pub response_content: String,
     pub add_tool_call: bool,
     pub follow_up_response: Option<String>,
+    pub use_jsonrpc_format: bool,
 }
 
 impl Default for MockLlmClient {
@@ -22,6 +23,7 @@ impl Default for MockLlmClient {
             follow_up_response: Some(
                 "This is a follow-up response after tool execution".to_string(),
             ),
+            use_jsonrpc_format: true, // Use JSON-RPC format by default
         }
     }
 }
@@ -34,6 +36,7 @@ impl MockLlmClient {
             follow_up_response: Some(
                 "This is a follow-up response after tool execution".to_string(),
             ),
+            use_jsonrpc_format: true, // Use JSON-RPC format by default
         }
     }
 
@@ -82,11 +85,21 @@ impl LlmClient for MockLlmClient {
             .map(|m| m.content.clone())
             .unwrap_or_default();
 
-        // Create mock response
-        let response_text = format!(
-            "{} (responding to: {})",
-            self.response_content, last_message
-        );
+        // Create response text, either as JSON-RPC or plain text
+        let response_text = if self.use_jsonrpc_format {
+            // Valid JSON-RPC format
+            format!(
+                r#"{{"jsonrpc":"2.0","result":"{} (responding to: {})","id":"mock-response-id"}}"#,
+                self.response_content,
+                last_message.replace("\"", "\\\"")
+            )
+        } else {
+            // Plain text format for testing validation
+            format!(
+                "{} (responding to: {})",
+                self.response_content, last_message
+            )
+        };
 
         // Create tool calls if requested
         let tool_calls = if self.add_tool_call {
@@ -122,7 +135,18 @@ impl LlmClient for MockLlmClient {
 
         let response_text = if is_follow_up_request && self.follow_up_response.is_some() {
             // Use the follow-up response for tool execution results
-            self.follow_up_response.as_ref().unwrap().clone()
+            let follow_up = self.follow_up_response.as_ref().unwrap().clone();
+
+            if self.use_jsonrpc_format {
+                // Format as JSON-RPC
+                format!(
+                    r#"{{"jsonrpc":"2.0","result":"{}","id":"mock-follow-up-id"}}"#,
+                    follow_up.replace("\"", "\\\"")
+                )
+            } else {
+                // Plain text for testing validation
+                follow_up
+            }
         } else {
             // Extract the user's last message to include in the response
             let last_message = context
@@ -131,11 +155,21 @@ impl LlmClient for MockLlmClient {
                 .map(|m| m.content.clone())
                 .unwrap_or_default();
 
-            // Create the response text with the last message
-            format!(
-                "{} (responding to: {})",
-                self.response_content, last_message
-            )
+            // Create response based on format setting
+            if self.use_jsonrpc_format {
+                // Valid JSON-RPC format
+                format!(
+                    r#"{{"jsonrpc":"2.0","result":"{} (responding to: {})","id":"mock-stream-id"}}"#,
+                    self.response_content,
+                    last_message.replace("\"", "\\\"")
+                )
+            } else {
+                // Plain text for testing validation
+                format!(
+                    "{} (responding to: {})",
+                    self.response_content, last_message
+                )
+            }
         };
 
         // Create a channel for the stream
