@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
 use futures::{Stream, StreamExt};
+use mcp_core::commands::mcp::{ToolInfo, ToolProvider};
 use mcp_core::context::{ConversationContext, MessageRole};
-use mcp_core::{api_log, debug_log};
+use mcp_core::{api_log, debug_log, McpCommand, SlashCommand};
 use mcp_llm::{BedrockClient, BedrockConfig, LlmClient, StreamChunk};
 use mcp_metrics::{count, gauge, time};
 use mcp_tools::{
@@ -10,7 +11,7 @@ use mcp_tools::{
     search::{FindConfig, FindTool, GrepConfig, GrepTool},
     shell::{ShellConfig, ShellTool},
     testing::TestRunnerTool,
-    ToolManager, ToolResult, ToolStatus,
+    ToolManager, ToolMetadata, ToolResult, ToolStatus,
 };
 use serde_json::Value;
 use std::io::Write as IoWrite;
@@ -47,7 +48,7 @@ pub struct CliApp {
     tool_manager: ToolManager,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CliConfig {
     pub model: String,
     pub use_mcp: bool,
@@ -1017,6 +1018,9 @@ impl Default for CliApp {
     }
 }
 
+// We now use CliToolProvider instead of implementing ToolProvider directly on CliApp
+// This avoids the need to clone the entire app
+
 // Debug helpers
 impl CliApp {
     // Get the current conversation context size
@@ -1045,5 +1049,49 @@ impl CliApp {
 
         // Return comma-separated roles
         roles.join(", ")
+    }
+    
+        /// Get a slash command handler for the CLI
+    pub fn get_slash_command_handler(&self) -> Box<dyn SlashCommand> {
+        // Create a custom tool provider rather than using the app itself
+        // This way we avoid the problematic cloning of the app
+        let tools = self.tool_manager.get_tools();
+        let tool_provider = CliToolProvider { tools };
+        Box::new(McpCommand::new(tool_provider))
+    }
+}
+
+/// A simple tool provider that doesn't require cloning the entire app
+struct CliToolProvider {
+    tools: Vec<ToolMetadata>,
+}
+
+impl ToolProvider for CliToolProvider {
+    fn get_tools(&self) -> Vec<ToolInfo> {
+        self.tools
+            .iter()
+            .map(|meta| ToolInfo {
+                id: meta.id.clone(),
+                name: meta.name.clone(), 
+                description: meta.description.clone(),
+                category: format!("{:?}", meta.category),
+                input_schema: meta.input_schema.clone(),
+                output_schema: meta.output_schema.clone(),
+            })
+            .collect()
+    }
+    
+    fn get_tool_details(&self, tool_id: &str) -> Option<ToolInfo> {
+        self.tools
+            .iter()
+            .find(|t| t.id == tool_id)
+            .map(|meta| ToolInfo {
+                id: meta.id.clone(),
+                name: meta.name.clone(),
+                description: meta.description.clone(),
+                category: format!("{:?}", meta.category),
+                input_schema: meta.input_schema.clone(),
+                output_schema: meta.output_schema.clone(),
+            })
     }
 }

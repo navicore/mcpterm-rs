@@ -1,9 +1,12 @@
+pub mod commands;
 pub mod config;
 pub mod context;
 pub mod logging;
 pub mod prompts;
 pub mod protocol;
 
+pub use commands::{CommandResult, CommandStatus, SlashCommand, parse_slash_command, process_slash_command};
+pub use commands::mcp::{McpCommand, ToolInfo, ToolProvider};
 pub use config::Config;
 pub use context::ConversationContext;
 pub use logging::tracing::{get_log_level, init_tracing};
