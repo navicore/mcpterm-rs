@@ -34,9 +34,27 @@ To see the raw JSON sent to and received from the LLM API, use the `trace` log l
 LOG_LEVEL=trace mcpterm-cli "Your prompt"
 ```
 
+### Intelligent Dependency Log Filtering
+
+When you specify a simple log level like `debug` or `trace`, the system intelligently:
+
+1. Sets your specified log level for all mcpterm-rs crates
+2. Keeps dependency crates (libraries we use) at `info` level by default
+3. Explicitly sets noisy dependencies like the `h2` crate (HTTP/2 library used by AWS SDK) to `warn` level
+
+This lets you see detailed logs from your application code without being overwhelmed by verbose dependency logs.
+
+```bash
+# Shows debug logs for mcpterm-rs crates while keeping dependencies quieter
+LOG_LEVEL=debug mcpterm-cli "Your prompt"
+
+# Shows trace-level logs for our code but still filters out noise
+LOG_LEVEL=trace mcpterm-cli "Your prompt"
+```
+
 ### To debug specific components
 
-You can configure different log levels for different parts of the application:
+You can still configure different log levels for different parts of the application:
 
 ```bash
 LOG_LEVEL=info,mcp_llm=trace,mcp_runtime=debug mcpterm-cli "Your prompt"
@@ -46,6 +64,12 @@ This sets:
 - Default log level to `info`
 - `mcp_llm` crate to `trace` level (shows API payloads)
 - `mcp_runtime` crate to `debug` level
+
+To override the filtering of specific dependencies, just include them in your directive:
+
+```bash
+LOG_LEVEL=debug,h2=debug mcpterm-cli "Your prompt"
+```
 
 ### Using RUST_LOG instead
 
@@ -72,6 +96,21 @@ For watching only relevant sections of high-volume logs, you might use `grep`:
 ```bash
 tail -f /tmp/mcpterm.log | grep "Raw JSON"
 ```
+
+## Troubleshooting Logging
+
+If you're having issues with log levels not working as expected, you can enable debug mode for the logging system itself:
+
+```bash
+MCPTERM_LOG_DEBUG=1 LOG_LEVEL=debug mcpterm-cli "Your prompt"
+```
+
+This will show detailed information about:
+- The filter directives being created
+- Any errors in parsing filter directives
+- The actual filter settings being applied
+
+This is especially useful when verifying that intelligent dependency filtering is working correctly.
 
 ## Example
 
