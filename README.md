@@ -31,10 +31,38 @@ The project uses a Staged Event-Driven Architecture (SEDA) approach to ensure a 
 cargo build
 ```
 
+### Installation
+
+To install MCP locally from the source:
+
+```bash
+# Install from the app crate that contains both CLI and TUI
+cargo install --path crates/app
+
+# Force reinstallation if already installed
+cargo install --path crates/app --force
+```
+
+This will install the binary to your `~/.cargo/bin` directory, which should be in your PATH.
+
 ### Running
+
+Run the installed binary:
+
+```bash
+mcp
+```
+
+Or run directly from the source:
 
 ```bash
 cargo run -p mcpterm-tui
+```
+
+For CLI mode:
+
+```bash
+cargo run -p mcpterm-cli
 ```
 
 ## Development
@@ -43,17 +71,25 @@ Each crate has its own README, tests, and example usage in its directory. The im
 
 ### Current Status
 
-- Basic crate structure and dependencies set up
-- Placeholder implementations in place
-- Core types defined
-- Need to implement actual functionality
+- Full crate structure and dependencies implemented
+- Core functionality implemented
+- Comprehensive test coverage added
+- End-to-end workflow functioning
+- Tools implemented:
+  - Shell commands
+  - Filesystem operations (read/write/list)
+  - Search tools (grep/find)
+  - Diff and patch tools
+  - Project navigation
+  - Language analysis for Rust, JavaScript/TypeScript, and Python
+  - Test runner for various frameworks (Rust, Jest, Mocha, Pytest, Unittest)
 
 ### Next Steps
 
-1. Start implementing core components
-2. Add comprehensive test coverage
-3. Implement a minimal end-to-end flow
-4. Refine and expand functionality
+1. Enhance error handling and user feedback
+2. Add more language analyzers
+3. Improve test coverage
+4. Add documentation and examples
 
 ## Previous Implementation
 

@@ -1,9 +1,19 @@
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+description = "Terminal-based AI coding assistant using MCP protocol"
+license = "MIT"
+authors = ["Ed Sweeney <ed@onextent.com>"]
+keywords = ["mcp", "llm", "coding", "assistant", "terminal", "tui", "cli", "aws", "bedrock"]
+documentation = "https://docs.rs/mcpterm-rs"
+repository = "https://github.com/navicore/mcpterm-rs"
+
 [workspace]
 resolver = "2"
 members = [
     "crates/app",
     "crates/mcp-core",
-    "crates/mcp-resources", 
+    "crates/mcp-resources",
     "crates/mcp-tools",
     "crates/mcp-runtime",
     "crates/mcp-llm",
@@ -58,8 +68,3 @@ tracing-subscriber = "0.3.17"
 
 # For error handling
 thiserror = "1.0.43"
-
-[workspace.package]
-authors = ["Your Name <your.email@example.com>"]
-edition = "2021"
-description = "Terminal-based AI coding assistant using MCP protocol"
