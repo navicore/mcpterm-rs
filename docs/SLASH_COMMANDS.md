@@ -29,6 +29,7 @@ Example:
 /mcp help            - Show this help message
 /mcp list            - List all available tools
 /mcp show <tool_id>  - Show detailed information for a specific tool
+/mcp schema          - Show JSON-RPC schemas for MCP protocol
 /mcp version         - Show MCP client version
 ```
 
@@ -97,6 +98,45 @@ Output Schema:
     }
   }
 }
+```
+
+### `/mcp schema`
+
+Show the JSON-RPC schemas used by the MCP protocol, including request and response formats.
+
+Example:
+```
+> /mcp schema
+
+=== MCP JSON-RPC Schemas ===
+
+1. Regular Response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": "Your message here...",
+  "id": "<request_id>"
+}
+```
+
+2. Tool Call Request
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "mcp.tool_call",
+  "params": {
+    "name": "<tool_name>",
+    "parameters": {
+      // Tool-specific parameters
+    }
+  },
+  "id": "<request_id>"
+}
+```
+
+...
 ```
 
 ### `/mcp version`

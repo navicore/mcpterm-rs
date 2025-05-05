@@ -6,13 +6,13 @@ use std::fmt;
 pub trait SlashCommand: Send + Sync {
     /// Get the name of the command (the part after the slash)
     fn name(&self) -> &str;
-    
+
     /// Get the description of this command
     fn description(&self) -> &str;
-    
+
     /// Get help information for this command
     fn help(&self) -> &str;
-    
+
     /// Execute the command with the given arguments and return the result
     fn execute(&self, args: &[&str]) -> CommandResult;
 }
@@ -21,13 +21,13 @@ pub trait SlashCommand: Send + Sync {
 pub struct CommandResult {
     /// The status of the command execution
     pub status: CommandStatus,
-    
+
     /// The output content if the command was successful
     pub content: Option<String>,
-    
+
     /// Any error message if the command failed
     pub error: Option<String>,
-    
+
     /// Structured output data if the command produced it
     pub data: Option<Value>,
 }
@@ -36,10 +36,10 @@ pub struct CommandResult {
 pub enum CommandStatus {
     /// Command executed successfully
     Success,
-    
+
     /// Command failed to execute
     Error,
-    
+
     /// Command requires more information
     NeedsMoreInfo,
 }
@@ -64,7 +64,7 @@ impl CommandResult {
             data: None,
         }
     }
-    
+
     /// Create a new successful result with content and data
     pub fn success_with_data(content: &str, data: Value) -> Self {
         Self {
@@ -74,7 +74,7 @@ impl CommandResult {
             data: Some(data),
         }
     }
-    
+
     /// Create a new error result
     pub fn error(error: &str) -> Self {
         Self {
@@ -84,7 +84,7 @@ impl CommandResult {
             data: None,
         }
     }
-    
+
     /// Create a new "needs more info" result
     pub fn needs_more_info(message: &str) -> Self {
         Self {
@@ -101,15 +101,15 @@ pub fn parse_slash_command(input: &str) -> Option<(String, Vec<String>)> {
     if !input.starts_with('/') {
         return None;
     }
-    
+
     let parts: Vec<&str> = input.split_whitespace().collect();
     if parts.is_empty() {
         return None;
     }
-    
+
     let command = parts[0].trim_start_matches('/').to_string();
     let args = parts[1..].iter().map(|s| s.to_string()).collect();
-    
+
     Some((command, args))
 }
 
@@ -121,16 +121,16 @@ pub fn process_slash_command(
     // Try to parse the input as a slash command
     let command_parts = parse_slash_command(input)?;
     let (command_name, args) = command_parts;
-    
+
     // Find the handler for this command
     let handler = handlers.iter().find(|h| h.name() == command_name)?;
-    
+
     // Convert the args for the handler
     let args_refs: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
-    
+
     // Execute the command
     let result = handler.execute(&args_refs);
-    
+
     Some(result)
 }
 

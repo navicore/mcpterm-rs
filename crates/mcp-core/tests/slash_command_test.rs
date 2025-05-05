@@ -1,5 +1,5 @@
 use mcp_core::commands::mcp::{McpCommand, ToolInfo, ToolProvider};
-use mcp_core::{CommandResult, CommandStatus, SlashCommand};
+use mcp_core::{CommandStatus, SlashCommand};
 use serde_json::json;
 
 // A simple mock tool provider for testing
@@ -35,7 +35,7 @@ impl ToolProvider for MockToolProvider {
     fn get_tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
-    
+
     fn get_tool_details(&self, tool_id: &str) -> Option<ToolInfo> {
         self.tools.iter().find(|t| t.id == tool_id).cloned()
     }
@@ -45,7 +45,7 @@ impl ToolProvider for MockToolProvider {
 fn test_mcp_command_help() {
     let provider = MockToolProvider::new();
     let command = McpCommand::new(provider);
-    
+
     // Test help command
     let result = command.execute(&["help"]);
     assert!(matches!(result.status, CommandStatus::Success));
@@ -58,7 +58,7 @@ fn test_mcp_command_help() {
 fn test_mcp_command_list() {
     let provider = MockToolProvider::new();
     let command = McpCommand::new(provider);
-    
+
     // Test list command
     let result = command.execute(&["list"]);
     assert!(matches!(result.status, CommandStatus::Success));
@@ -74,7 +74,7 @@ fn test_mcp_command_list() {
 fn test_mcp_command_show_valid() {
     let provider = MockToolProvider::new();
     let command = McpCommand::new(provider);
-    
+
     // Test show with valid tool
     let result = command.execute(&["show", "tool1"]);
     assert!(matches!(result.status, CommandStatus::Success));
@@ -87,7 +87,7 @@ fn test_mcp_command_show_valid() {
 fn test_mcp_command_show_invalid() {
     let provider = MockToolProvider::new();
     let command = McpCommand::new(provider);
-    
+
     // Test show with invalid tool
     let result = command.execute(&["show", "invalid"]);
     assert!(matches!(result.status, CommandStatus::Error));
@@ -100,7 +100,7 @@ fn test_mcp_command_show_invalid() {
 fn test_mcp_command_unknown() {
     let provider = MockToolProvider::new();
     let command = McpCommand::new(provider);
-    
+
     // Test unknown command
     let result = command.execute(&["unknown"]);
     assert!(matches!(result.status, CommandStatus::Error));

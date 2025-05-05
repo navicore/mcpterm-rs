@@ -78,6 +78,7 @@ The CLI supports local slash commands in interactive mode for debugging and insp
 ```bash
 /mcp list                # List all available tools
 /mcp show <tool_id>      # Show details and JSON schema for a tool
+/mcp schema              # Show JSON-RPC schemas for the MCP protocol
 /mcp help                # Show help for slash commands
 ```
 
