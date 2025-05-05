@@ -125,17 +125,18 @@ impl TestRunnerTool {
                     return Ok(TestFramework::Mocha);
                 }
             }
-            
+
             // Default to Jest if we can't determine the framework
             return Ok(TestFramework::Jest);
         }
 
         // Check for Python project
-        if Path::new(&dir_path.join("pytest.ini")).exists() 
-            || Path::new(&dir_path.join("conftest.py")).exists() {
+        if Path::new(&dir_path.join("pytest.ini")).exists()
+            || Path::new(&dir_path.join("conftest.py")).exists()
+        {
             return Ok(TestFramework::Pytest);
         }
-        
+
         // Look for Python files that might use unittest
         let mut has_python_files = false;
         if let Ok(entries) = std::fs::read_dir(dir_path) {
@@ -144,7 +145,9 @@ impl TestRunnerTool {
                     if ext == "py" {
                         has_python_files = true;
                         if let Ok(content) = std::fs::read_to_string(entry.path()) {
-                            if content.contains("import unittest") || content.contains("from unittest import") {
+                            if content.contains("import unittest")
+                                || content.contains("from unittest import")
+                            {
                                 return Ok(TestFramework::Unittest);
                             }
                         }
@@ -152,12 +155,14 @@ impl TestRunnerTool {
                 }
             }
         }
-        
+
         if has_python_files {
             return Ok(TestFramework::Pytest);
         }
 
-        Err(anyhow!("Could not detect a supported test framework. Please specify the framework explicitly."))
+        Err(anyhow!(
+            "Could not detect a supported test framework. Please specify the framework explicitly."
+        ))
     }
 
     /// Build the test command for a given framework
@@ -169,7 +174,7 @@ impl TestRunnerTool {
     ) -> Result<(Command, Regex)> {
         let mut cmd = Command::new("sh");
         cmd.arg("-c");
-        
+
         let command_str = match framework {
             TestFramework::Rust => {
                 let mut args = String::from("cargo test");
@@ -187,52 +192,58 @@ impl TestRunnerTool {
                     }
                     format!("cd {} && {}", dir.display(), args)
                 }
-            },
+            }
             TestFramework::Jest => {
                 let mut args = String::from("npx jest");
                 if let Some(filter) = test_filter {
                     args.push_str(&format!(" -t \"{}\"", filter));
                 }
                 format!("cd {} && {}", path.display(), args)
-            },
+            }
             TestFramework::Mocha => {
                 let mut args = String::from("npx mocha");
                 if let Some(filter) = test_filter {
                     args.push_str(&format!(" -g \"{}\"", filter));
                 }
                 format!("cd {} && {}", path.display(), args)
-            },
+            }
             TestFramework::Pytest => {
                 let mut args = String::from("python -m pytest");
                 if let Some(filter) = test_filter {
                     args.push_str(&format!(" -k \"{}\"", filter));
                 }
                 format!("cd {} && {}", path.display(), args)
-            },
+            }
             TestFramework::Unittest => {
                 let mut args = String::from("python -m unittest");
                 if let Some(filter) = test_filter {
                     args.push_str(&format!(" {}", filter));
                 }
                 format!("cd {} && {}", path.display(), args)
-            },
+            }
             TestFramework::Custom(custom_cmd) => {
                 format!("cd {} && {}", path.display(), custom_cmd)
-            },
+            }
         };
-        
+
         cmd.arg(command_str);
-        
+
         // Create regex patterns for parsing test output based on framework
         let output_pattern = match framework {
-            TestFramework::Rust => Regex::new(r"test (.*?)\s+\.\.\.\s+(ok|failed|ignored)").unwrap(),
+            TestFramework::Rust => {
+                Regex::new(r"test (.*?)\s+\.\.\.\s+(ok|failed|ignored)").unwrap()
+            }
             TestFramework::Jest => Regex::new(r"(PASS|FAIL)\s+.*?([\w\-\.\/]+)").unwrap(),
             TestFramework::Mocha => Regex::new(r"✓|✖\s+(.*?)(\(\d+ms\))?").unwrap(),
-            TestFramework::Pytest => Regex::new(r"(PASSED|FAILED|SKIPPED)\s+\[([\d\.]+)s\]\s+(.*?)$").unwrap(),
+            TestFramework::Pytest => {
+                Regex::new(r"(PASSED|FAILED|SKIPPED)\s+\[([\d\.]+)s\]\s+(.*?)$").unwrap()
+            }
             TestFramework::Unittest => Regex::new(r"(test\w+).*?\.\.\.\s+(ok|FAIL)").unwrap(),
-            TestFramework::Custom(_) => Regex::new(r"(pass|fail|error|ok|PASS|FAIL|ERROR)").unwrap(),
+            TestFramework::Custom(_) => {
+                Regex::new(r"(pass|fail|error|ok|PASS|FAIL|ERROR)").unwrap()
+            }
         };
-        
+
         Ok((cmd, output_pattern))
     }
 
@@ -245,22 +256,22 @@ impl TestRunnerTool {
         timeout_secs: u64,
     ) -> Result<TestRunResults> {
         let path = PathBuf::from(path);
-        
+
         // Ensure the path exists
         if !path.exists() {
             return Err(anyhow!("Path does not exist: {}", path.display()));
         }
-        
+
         // Build the command for the detected framework
         let (cmd, output_pattern) = self.build_test_command(&framework, &path, test_filter)?;
-        
+
         // Convert std::process::Command to tokio::process::Command for async execution
         let mut tokio_cmd = TokioCommand::from(cmd);
-        
+
         // Set timeout for test execution
         let start_time = std::time::Instant::now();
         let timeout_duration = Duration::from_secs(timeout_secs);
-        
+
         // Execute the command with timeout
         let output = match timeout(timeout_duration, tokio_cmd.output()).await {
             Ok(result) => match result {
@@ -281,21 +292,21 @@ impl TestRunnerTool {
                 });
             }
         };
-        
+
         let end_time = std::time::Instant::now();
         let duration_ms = end_time.duration_since(start_time).as_millis() as u64;
-        
+
         // Convert output to string
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         let combined_output = format!("{}\n{}", stdout, stderr);
-        
+
         // Parse test results
         let mut test_results = Vec::new();
         let mut passed = 0;
         let mut failed = 0;
         let mut skipped = 0;
-        
+
         for cap in output_pattern.captures_iter(&combined_output) {
             match framework {
                 TestFramework::Rust => {
@@ -305,21 +316,21 @@ impl TestRunnerTool {
                             "ok" => {
                                 passed += 1;
                                 TestStatus::Passed
-                            },
+                            }
                             "failed" => {
                                 failed += 1;
                                 TestStatus::Failed
-                            },
+                            }
                             "ignored" => {
                                 skipped += 1;
                                 TestStatus::Skipped
-                            },
+                            }
                             _ => {
                                 failed += 1;
                                 TestStatus::Error
-                            },
+                            }
                         };
-                        
+
                         test_results.push(TestResult {
                             name: test_name,
                             status,
@@ -327,7 +338,7 @@ impl TestRunnerTool {
                             message: None,
                         });
                     }
-                },
+                }
                 TestFramework::Jest | TestFramework::Mocha => {
                     if cap.len() >= 2 {
                         let (test_name, status) = if framework == TestFramework::Jest {
@@ -335,15 +346,15 @@ impl TestRunnerTool {
                                 "PASS" => {
                                     passed += 1;
                                     TestStatus::Passed
-                                },
+                                }
                                 "FAIL" => {
                                     failed += 1;
                                     TestStatus::Failed
-                                },
+                                }
                                 _ => {
                                     failed += 1;
                                     TestStatus::Error
-                                },
+                                }
                             };
                             (cap[2].to_string(), status)
                         } else {
@@ -356,11 +367,14 @@ impl TestRunnerTool {
                             };
                             (cap[1].to_string(), status)
                         };
-                        
+
                         // Try to extract duration if available
                         let duration = if cap.len() >= 3 && framework == TestFramework::Mocha {
                             let duration_str = &cap[2];
-                            if let Some(ms_str) = duration_str.strip_prefix("(").and_then(|s| s.strip_suffix("ms)")) {
+                            if let Some(ms_str) = duration_str
+                                .strip_prefix("(")
+                                .and_then(|s| s.strip_suffix("ms)"))
+                            {
                                 ms_str.parse::<u64>().ok()
                             } else {
                                 None
@@ -368,7 +382,7 @@ impl TestRunnerTool {
                         } else {
                             None
                         };
-                        
+
                         test_results.push(TestResult {
                             name: test_name,
                             status,
@@ -376,7 +390,7 @@ impl TestRunnerTool {
                             message: None,
                         });
                     }
-                },
+                }
                 TestFramework::Pytest => {
                     if cap.len() >= 4 {
                         let test_name = cap[3].to_string();
@@ -386,26 +400,26 @@ impl TestRunnerTool {
                         } else {
                             None
                         };
-                        
+
                         let status = match &cap[1] {
                             "PASSED" => {
                                 passed += 1;
                                 TestStatus::Passed
-                            },
+                            }
                             "FAILED" => {
                                 failed += 1;
                                 TestStatus::Failed
-                            },
+                            }
                             "SKIPPED" => {
                                 skipped += 1;
                                 TestStatus::Skipped
-                            },
+                            }
                             _ => {
                                 failed += 1;
                                 TestStatus::Error
-                            },
+                            }
                         };
-                        
+
                         test_results.push(TestResult {
                             name: test_name,
                             status,
@@ -413,7 +427,7 @@ impl TestRunnerTool {
                             message: None,
                         });
                     }
-                },
+                }
                 TestFramework::Unittest => {
                     if cap.len() >= 3 {
                         let test_name = cap[1].to_string();
@@ -421,17 +435,17 @@ impl TestRunnerTool {
                             "ok" => {
                                 passed += 1;
                                 TestStatus::Passed
-                            },
+                            }
                             "FAIL" => {
                                 failed += 1;
                                 TestStatus::Failed
-                            },
+                            }
                             _ => {
                                 failed += 1;
                                 TestStatus::Error
-                            },
+                            }
                         };
-                        
+
                         test_results.push(TestResult {
                             name: test_name,
                             status,
@@ -439,7 +453,7 @@ impl TestRunnerTool {
                             message: None,
                         });
                     }
-                },
+                }
                 TestFramework::Custom(_) => {
                     // For custom commands, just try to extract pass/fail information
                     let status_str = &cap[1].to_lowercase();
@@ -448,10 +462,10 @@ impl TestRunnerTool {
                     } else if status_str.contains("fail") || status_str.contains("error") {
                         failed += 1;
                     }
-                },
+                }
             }
         }
-        
+
         // If we couldn't parse any tests but the command succeeded, add a placeholder result
         if test_results.is_empty() && output.status.success() {
             passed = 1;
@@ -459,10 +473,13 @@ impl TestRunnerTool {
                 name: "unknown".to_string(),
                 status: TestStatus::Passed,
                 duration_ms: None,
-                message: Some("Test command succeeded but no individual test results could be parsed".to_string()),
+                message: Some(
+                    "Test command succeeded but no individual test results could be parsed"
+                        .to_string(),
+                ),
             });
         }
-        
+
         // Determine overall status
         let status = if output.status.success() && failed == 0 {
             TestStatus::Passed
@@ -471,9 +488,9 @@ impl TestRunnerTool {
         } else {
             TestStatus::Error
         };
-        
+
         let total = passed + failed + skipped;
-        
+
         Ok(TestRunResults {
             status,
             framework,
@@ -546,38 +563,38 @@ impl Tool for TestRunnerTool {
         // Parse parameters
         let params: TestRunnerParams = serde_json::from_value(params_json)
             .map_err(|e| anyhow!("Invalid parameters: {}", e))?;
-        
+
         // Validate path
         if params.path.is_empty() {
             return Err(anyhow!("Path must be specified"));
         }
-        
+
         let path = Path::new(&params.path);
-        
+
         // Determine framework (detect or use specified)
         let framework = if let Some(fw) = params.framework {
             fw
+        } else if path.is_dir() {
+            self.detect_framework(path)?
+        } else if let Some(parent) = path.parent() {
+            self.detect_framework(parent)?
         } else {
-            if path.is_dir() {
-                self.detect_framework(path)?
-            } else if let Some(parent) = path.parent() {
-                self.detect_framework(parent)?
-            } else {
-                return Err(anyhow!("Could not detect framework from file path"));
-            }
+            return Err(anyhow!("Could not detect framework from file path"));
         };
-        
+
         // Set timeout (default or user-specified)
         let timeout_secs = params.timeout_seconds.unwrap_or(300);
-        
+
         // Run tests
         let test_filter = params.test_filter.as_deref();
-        let results = self.run_tests(framework, &params.path, test_filter, timeout_secs).await?;
-        
+        let results = self
+            .run_tests(framework, &params.path, test_filter, timeout_secs)
+            .await?;
+
         // Convert results to JSON
         let json_result = serde_json::to_value(results)
             .map_err(|e| anyhow!("Failed to serialize results: {}", e))?;
-        
+
         Ok(crate::ToolResult {
             tool_id: "test_runner".to_string(),
             status: crate::ToolStatus::Success,
@@ -592,63 +609,69 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::tempdir;
-    
+
     #[test]
     fn test_detect_rust_framework() {
         let dir = tempdir().unwrap();
         let cargo_toml_path = dir.path().join("Cargo.toml");
-        
+
         // Create a minimal Cargo.toml
-        fs::write(cargo_toml_path, "[package]\nname = \"test\"\nversion = \"0.1.0\"").unwrap();
-        
+        fs::write(
+            cargo_toml_path,
+            "[package]\nname = \"test\"\nversion = \"0.1.0\"",
+        )
+        .unwrap();
+
         let tool = TestRunnerTool::new();
         let result = tool.detect_framework(dir.path());
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), TestFramework::Rust);
     }
-    
+
     #[test]
     fn test_detect_jest_framework() {
         let dir = tempdir().unwrap();
         let package_json_path = dir.path().join("package.json");
-        
+
         // Create a minimal package.json with Jest
-        fs::write(package_json_path, 
+        fs::write(package_json_path,
             "{\"name\": \"test\", \"version\": \"1.0.0\", \"devDependencies\": {\"jest\": \"^27.0.0\"}}").unwrap();
-        
+
         let tool = TestRunnerTool::new();
         let result = tool.detect_framework(dir.path());
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), TestFramework::Jest);
     }
-    
+
     #[test]
     fn test_detect_pytest_framework() {
         let dir = tempdir().unwrap();
         let pytest_ini_path = dir.path().join("pytest.ini");
-        
+
         // Create a minimal pytest.ini
         fs::write(pytest_ini_path, "[pytest]\naddopts = -xvs").unwrap();
-        
+
         let tool = TestRunnerTool::new();
         let result = tool.detect_framework(dir.path());
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), TestFramework::Pytest);
     }
-    
+
     #[test]
     fn test_build_command_rust() {
         let tool = TestRunnerTool::new();
         let dir = Path::new(".");
-        
-        let (cmd, _) = tool.build_test_command(&TestFramework::Rust, dir, Some("test_name")).unwrap();
-        
+
+        let (cmd, _) = tool
+            .build_test_command(&TestFramework::Rust, dir, Some("test_name"))
+            .unwrap();
+
         let args: Vec<_> = cmd.get_args().collect();
         let command_str = args[1].to_str().unwrap();
-        
+
         assert!(command_str.contains("cargo test test_name"));
     }
 }
