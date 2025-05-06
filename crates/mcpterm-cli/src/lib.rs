@@ -417,8 +417,15 @@ impl CliApp {
             mcp_core::ValidationResult::InvalidFormat(_) => {
                 count!("llm.responses.invalid_format", 1);
             }
-            mcp_core::ValidationResult::Mixed { .. } => {
+            mcp_core::ValidationResult::Mixed {
+                json_rpc: Some(_), ..
+            } => {
                 count!("llm.responses.mixed", 1);
+                count!("llm.responses.mixed_valid", 1);
+            }
+            mcp_core::ValidationResult::Mixed { json_rpc: None, .. } => {
+                count!("llm.responses.mixed", 1);
+                count!("llm.responses.mixed_invalid", 1);
             }
             mcp_core::ValidationResult::NotJsonRpc(_) => {
                 count!("llm.responses.not_jsonrpc", 1);
@@ -431,8 +438,44 @@ impl CliApp {
                 self.context.add_assistant_message(&response_content);
                 Ok(response_content)
             }
+            mcp_core::ValidationResult::Mixed {
+                text,
+                json_rpc: Some(json_rpc),
+            } => {
+                // We have both text and valid JSON-RPC
+                debug!("Response contains both text and valid JSON-RPC");
+                count!("llm.responses.mixed_valid", 1);
+
+                // Display the text part to the user with clear formatting
+                let formatted_text = text.trim();
+                println!("\n--- Assistant Message ---\n{}\n---------------------------", formatted_text);
+
+                // Add the text part to conversation
+                self.context.add_assistant_message(&text);
+
+                // Extract tool calls from the JSON-RPC part if present
+                if let Some(method) = json_rpc.get("method").and_then(|v| v.as_str()) {
+                    if method == "mcp.tool_call" && json_rpc.get("params").is_some() {
+                        // Parse a tool call from JSON-RPC
+                        match self.parse_tool_call_from_json(&json_rpc) {
+                            Ok(tool_call) => {
+                                // Process the tool call and get follow-up response
+                                return self.process_mixed_content_tool_call(&tool_call).await;
+                            }
+                            Err(e) => {
+                                debug!("Failed to parse tool call from mixed content: {}", e);
+                                // Continue with just the text part
+                                return Ok(text.to_string());
+                            }
+                        }
+                    }
+                }
+
+                // No tool calls or couldn't parse, just return the text
+                Ok(text.to_string())
+            }
             _ => {
-                // Invalid format, create a correction prompt
+                // Invalid format or mixed with invalid JSON-RPC, create a correction prompt
                 let correction = mcp_core::create_correction_prompt(&validation_result);
                 warn!("LLM response is not valid JSON-RPC, sending correction prompt");
                 debug!("Correction prompt: {}", correction);
@@ -586,6 +629,7 @@ impl CliApp {
         let _ = std::io::stdout().flush();
     }
 
+    // Get a follow-up response after tool execution
     async fn get_streaming_follow_up_response(&mut self) -> Result<String> {
         debug!("Getting follow-up response with tool results...");
 
@@ -610,45 +654,89 @@ impl CliApp {
                     mcp_core::ValidationResult::InvalidFormat(_) => {
                         count!("llm.streaming_follow_up_responses.invalid_format", 1);
                     }
-                    mcp_core::ValidationResult::Mixed { .. } => {
+                    mcp_core::ValidationResult::Mixed {
+                        json_rpc: Some(_), ..
+                    } => {
                         count!("llm.streaming_follow_up_responses.mixed", 1);
+                        count!("llm.streaming_follow_up_responses.mixed_valid", 1);
+                    }
+                    mcp_core::ValidationResult::Mixed { json_rpc: None, .. } => {
+                        count!("llm.streaming_follow_up_responses.mixed", 1);
+                        count!("llm.streaming_follow_up_responses.mixed_invalid", 1);
                     }
                     mcp_core::ValidationResult::NotJsonRpc(_) => {
                         count!("llm.streaming_follow_up_responses.not_jsonrpc", 1);
                     }
                 }
 
-                // If follow-up is not valid JSON-RPC, send a correction prompt
-                if !matches!(validation_result, mcp_core::ValidationResult::Valid(_)) {
-                    warn!("Streaming follow-up response is not valid JSON-RPC, sending correction prompt");
-                    let correction = mcp_core::create_correction_prompt(&validation_result);
+                // Process follow-up based on validation result
+                match validation_result {
+                    mcp_core::ValidationResult::Valid(_) => {
+                        // Valid response, continue processing
+                        if follow_up.content.trim().is_empty() {
+                            debug!("FOLLOW-UP RESPONSE WAS EMPTY! Retrying...");
+                            self.handle_problematic_streaming_follow_up().await
+                        } else if follow_up.content.contains("mcp.tool_call") {
+                            // The follow-up contains another tool call, this is actually a normal flow
+                            debug!("FOLLOW-UP CONTAINS ANOTHER TOOL CALL, processing normally");
 
-                    // Add the invalid response to the conversation for reference
-                    let invalid_marker = format!("INVALID FORMAT: {}", follow_up.content);
-                    self.context.add_assistant_message(&invalid_marker);
+                            // Add the tool call to the conversation
+                            self.context.add_assistant_message(&follow_up.content);
 
-                    // Add our correction prompt
-                    self.context.add_user_message(&correction);
+                            // Parse and process the tool call
+                            let parsed_json: serde_json::Value =
+                                serde_json::from_str(&follow_up.content)?;
+                            if let Ok(tool_call) = self.parse_tool_call_from_json(&parsed_json) {
+                                // Process the next tool call and continue the conversation
+                                return self.process_mixed_content_tool_call(&tool_call).await;
+                            } else {
+                                // Failed to parse tool call, return the content as-is
+                                Ok(follow_up.content)
+                            }
+                        } else {
+                            // Add the valid follow-up response to the conversation
+                            self.context.add_assistant_message(&follow_up.content);
 
-                    // Get a corrected response
-                    return self.get_corrected_response().await;
-                }
+                            // Format and print the response
+                            let formatted_response = format_llm_response(&follow_up.content);
+                            println!("Response: {}", formatted_response);
 
-                // Check if the follow-up content is empty or contains another tool call
-                if follow_up.is_empty_or_tool_call {
-                    self.handle_problematic_streaming_follow_up().await
-                } else {
-                    // We have a valid follow-up response
-                    self.context.add_assistant_message(&follow_up.content);
-                    debug!(
-                        "Received valid follow-up response after tool execution: length={} chars",
-                        follow_up.content.len()
-                    );
+                            // Return the response
+                            Ok(follow_up.content)
+                        }
+                    }
+                    mcp_core::ValidationResult::Mixed {
+                        text,
+                        json_rpc: Some(_),
+                    } => {
+                        // We have both text and valid JSON-RPC in the follow-up
+                        debug!("Follow-up response contains both text and valid JSON-RPC");
+                        
+                        // Display the text part to the user with clear formatting
+                        let formatted_text = text.trim();
+                        println!("\n--- Assistant Message (Follow-up) ---\n{}\n---------------------------------------", formatted_text);
+                        
+                        // Add the text part to conversation
+                        self.context.add_assistant_message(&text);
 
-                    // Sleep to ensure all outputs are processed
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        // Return the text part as the response
+                        Ok(text.to_string())
+                    }
+                    _ => {
+                        // Invalid format or mixed with invalid JSON-RPC, create a correction prompt
+                        warn!("Streaming follow-up response is not valid JSON-RPC, sending correction prompt");
+                        let correction = mcp_core::create_correction_prompt(&validation_result);
 
-                    Ok(follow_up.content)
+                        // Add the invalid response to the conversation for reference
+                        let invalid_marker = format!("INVALID FORMAT: {}", follow_up.content);
+                        self.context.add_assistant_message(&invalid_marker);
+
+                        // Add our correction prompt
+                        self.context.add_user_message(&correction);
+
+                        // Get a corrected response
+                        self.get_corrected_response().await
+                    }
                 }
             }
             Err(e) => {
@@ -820,8 +908,15 @@ impl CliApp {
             mcp_core::ValidationResult::InvalidFormat(_) => {
                 count!("llm.responses.invalid_format", 1);
             }
-            mcp_core::ValidationResult::Mixed { .. } => {
+            mcp_core::ValidationResult::Mixed {
+                json_rpc: Some(_), ..
+            } => {
                 count!("llm.responses.mixed", 1);
+                count!("llm.responses.mixed_valid", 1);
+            }
+            mcp_core::ValidationResult::Mixed { json_rpc: None, .. } => {
+                count!("llm.responses.mixed", 1);
+                count!("llm.responses.mixed_invalid", 1);
             }
             mcp_core::ValidationResult::NotJsonRpc(_) => {
                 count!("llm.responses.not_jsonrpc", 1);
@@ -851,8 +946,44 @@ impl CliApp {
                 debug_log("Request completed successfully");
                 Ok(response.content)
             }
+            mcp_core::ValidationResult::Mixed {
+                text,
+                json_rpc: Some(json_rpc),
+            } => {
+                // We have both text and valid JSON-RPC
+                debug!("Response contains both text and valid JSON-RPC");
+
+                // Display the text part to the user
+                let formatted_text = text.trim();
+                println!("\n--- Assistant Message ---\n{}\n---------------------------", formatted_text);
+
+                // Add the text part to conversation
+                self.context.add_assistant_message(&formatted_text);
+
+                // Extract tool calls from the JSON-RPC part if present
+                if let Some(method) = json_rpc.get("method").and_then(|v| v.as_str()) {
+                    if method == "mcp.tool_call" && json_rpc.get("params").is_some() {
+                        // Process the tool call
+                        if let Ok(tool_calls) = self.extract_tool_calls_from_json(&json_rpc) {
+                            // Process the first tool call (if multiple, we just handle the first one for now)
+                            if let Some(tool_call) = tool_calls.first() {
+                                return self.process_mixed_content_tool_call(tool_call).await;
+                            } else {
+                                // If no tool calls (shouldn't happen), just return the text
+                                return Ok(formatted_text.to_string());
+                            }
+                        } else {
+                            // Failed to extract tool calls, just return the text
+                            return Ok(formatted_text.to_string());
+                        }
+                    }
+                }
+
+                // No tool calls or couldn't parse, just return the text
+                Ok(formatted_text.to_string())
+            }
             _ => {
-                // Invalid format, create a correction prompt
+                // Invalid format or mixed with invalid JSON-RPC, create a correction prompt
                 let correction = mcp_core::create_correction_prompt(&validation_result);
                 warn!("LLM response is not valid JSON-RPC, sending correction prompt");
                 debug!("Correction prompt: {}", correction);
@@ -918,8 +1049,15 @@ impl CliApp {
             mcp_core::ValidationResult::InvalidFormat(_) => {
                 count!("llm.follow_up_responses.invalid_format", 1);
             }
-            mcp_core::ValidationResult::Mixed { .. } => {
+            mcp_core::ValidationResult::Mixed {
+                json_rpc: Some(_), ..
+            } => {
                 count!("llm.follow_up_responses.mixed", 1);
+                count!("llm.follow_up_responses.mixed_valid", 1);
+            }
+            mcp_core::ValidationResult::Mixed { json_rpc: None, .. } => {
+                count!("llm.follow_up_responses.mixed", 1);
+                count!("llm.follow_up_responses.mixed_invalid", 1);
             }
             mcp_core::ValidationResult::NotJsonRpc(_) => {
                 count!("llm.follow_up_responses.not_jsonrpc", 1);
@@ -928,21 +1066,61 @@ impl CliApp {
 
         match validation_result {
             mcp_core::ValidationResult::Valid(_) => {
-                // Check if the follow-up content is empty or contains another tool call
-                if follow_up_response.content.trim().is_empty()
-                    || follow_up_response.content.contains("mcp.tool_call")
-                {
-                    debug!(
-                        "FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying..."
-                    );
+                // Check if the follow-up content is empty
+                if follow_up_response.content.trim().is_empty() {
+                    debug!("FOLLOW-UP RESPONSE WAS EMPTY! Retrying...");
+                    return self.handle_problematic_non_streaming_follow_up().await;
+                } else if follow_up_response.content.contains("mcp.tool_call") {
+                    // The follow-up contains another tool call, this is actually a normal flow
+                    debug!("FOLLOW-UP CONTAINS ANOTHER TOOL CALL, processing normally");
 
-                    // Handle problematic follow-up response
-                    self.handle_problematic_non_streaming_follow_up().await
-                } else {
-                    // We have a valid non-empty follow-up response
-                    self.handle_successful_non_streaming_follow_up(&follow_up_response.content)
-                        .await
+                    // Add the tool call to the conversation
+                    self.context
+                        .add_assistant_message(&follow_up_response.content);
+
+                    // Parse and process the tool call
+                    let parsed_json: serde_json::Value =
+                        serde_json::from_str(&follow_up_response.content)?;
+                    if let Ok(tool_call) = self.parse_tool_call_from_json(&parsed_json) {
+                        // Process the next tool call and continue the conversation
+                        return self.process_mixed_content_tool_call(&tool_call).await;
+                    } else {
+                        // Failed to parse tool call, handle normally
+                        return self
+                            .handle_successful_non_streaming_follow_up(&follow_up_response.content)
+                            .await;
+                    }
                 }
+
+                // Valid follow-up response, return it
+                return self
+                    .handle_successful_non_streaming_follow_up(&follow_up_response.content)
+                    .await;
+            }
+            mcp_core::ValidationResult::Mixed {
+                text,
+                json_rpc: Some(json_rpc),
+            } => {
+                // We have both text and valid JSON-RPC in the follow-up
+                debug!("Follow-up response contains both text and valid JSON-RPC");
+
+                // Display the text part to the user
+                let formatted_text = text.trim();
+                println!("\n--- Assistant Message (Follow-up) ---\n{}\n---------------------------------------", formatted_text);
+
+                // Add the text part to conversation
+                self.context.add_assistant_message(&formatted_text);
+
+                // Extract tool calls from the JSON-RPC part if present
+                if let Some(method) = json_rpc.get("method").and_then(|v| v.as_str()) {
+                    if method == "mcp.tool_call" && json_rpc.get("params").is_some() {
+                        // This would be a recursive tool call - not supported
+                        debug!("Ignoring embedded tool call in follow-up response");
+                    }
+                }
+
+                // Return the text part as the response
+                Ok(formatted_text.to_string())
             }
             _ => {
                 // Invalid format, create a correction prompt
@@ -1033,8 +1211,8 @@ impl CliApp {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         // Format and print the follow-up response
-        //let formatted_response = format_llm_response(content);
-        //println!("{}", formatted_response);
+        let formatted_response = format_llm_response(content);
+        println!("Response: {}", formatted_response);
         debug!("Tool call flow completed successfully");
         Ok(content.to_string())
     }
@@ -1302,6 +1480,84 @@ impl CliApp {
             r#"{{"jsonrpc":"2.0","result":"{}","id":"fallback_response"}}"#,
             extracted_text.replace('"', "\\\"")
         )
+    }
+
+    // Parse a tool call from JSON-RPC
+    fn parse_tool_call_from_json(&self, json_rpc: &serde_json::Value) -> Result<mcp_llm::ToolCall> {
+        // Extract the tool call information from the JSON-RPC
+        let params = json_rpc
+            .get("params")
+            .ok_or_else(|| anyhow!("Missing params in tool call"))?;
+
+        let tool_id = params
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("Missing tool name in params"))?;
+
+        let parameters = params
+            .get("parameters")
+            .cloned()
+            .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+
+        // Create the tool call
+        Ok(mcp_llm::ToolCall {
+            id: json_rpc
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("embedded_tool_call")
+                .to_string(),
+            tool: tool_id.to_string(),
+            params: parameters,
+        })
+    }
+
+    // Extract tool calls from JSON-RPC (for non-streaming)
+    fn extract_tool_calls_from_json(
+        &self,
+        json_rpc: &serde_json::Value,
+    ) -> Result<Vec<mcp_llm::ToolCall>> {
+        // For now, we just support a single tool call per JSON-RPC
+        if let Ok(tool_call) = self.parse_tool_call_from_json(json_rpc) {
+            Ok(vec![tool_call])
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    // Process a tool call from mixed content and get follow-up response
+    async fn process_mixed_content_tool_call(
+        &mut self,
+        tool_call: &mcp_llm::ToolCall,
+    ) -> Result<String> {
+        Box::pin(self._process_mixed_content_tool_call(tool_call)).await
+    }
+
+    // Private implementation to avoid recursive async fn issues
+    async fn _process_mixed_content_tool_call(
+        &mut self,
+        tool_call: &mcp_llm::ToolCall,
+    ) -> Result<String> {
+        debug!(
+            "Processing tool call from mixed content: {}",
+            tool_call.tool
+        );
+
+        // Inform the user about the tool being executed
+        let tool_info = format!("Executing embedded tool: {}", tool_call.tool);
+        println!("\n--- System Action ---\n{}\n---------------------", tool_info);
+
+        // Add the tool call info to conversation for context
+        self.context.add_assistant_message(&tool_info);
+
+        // Handle the tool call
+        self.handle_tool_call(tool_call).await?;
+
+        // Get follow-up response after tool execution
+        if self.config.streaming {
+            self.get_streaming_follow_up_response().await
+        } else {
+            self.get_non_streaming_follow_up().await
+        }
     }
 
     fn create_fallback_message(&self, tool_result_output: &str) -> String {

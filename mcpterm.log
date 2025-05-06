@@ -1,0 +1,1122 @@
+2025-05-05T16:56:07.377188Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:144: Starting mcpterm-cli with tracing
+2025-05-05T16:56:07.377212Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:145: Log level debugging enabled
+2025-05-05T16:56:07.377213Z TRACE mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:146: Log level tracing enabled - will show detailed API requests/responses
+2025-05-05T16:56:07.377227Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:163: Loading configuration
+2025-05-05T16:56:07.377491Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:166: Configuration loaded successfully
+2025-05-05T16:56:07.377495Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:183: Using model: us.anthropic.claude-3-7-sonnet-20250219-v1:0
+2025-05-05T16:56:07.377496Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:220: CLI config: CliConfig {
+    model: "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+    use_mcp: true,
+    region: Some(
+        "us-west-2",
+    ),
+    streaming: true,
+    enable_tools: true,
+    require_tool_confirmation: true,
+    auto_approve_tools: false,
+}
+2025-05-05T16:56:07.377738Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:43: Creating new conversation context
+2025-05-05T16:56:07.377740Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:226: Initializing CLI application
+2025-05-05T16:56:07.377838Z TRACE mcpterm_cli: crates/mcpterm-cli/src/lib.rs:325: Tool documentation: Available tools:
+
+1. "shell": Executes shell commands with configurable timeout
+   Parameters: {
+     "command": "string",           // The shell command to execute
+     "timeout": "integer",           // Optional: Command timeout in milliseconds
+   }
+
+2. "diff": Compare two files or text strings and show differences
+   Parameters: {
+     "context_lines": "integer",           // Optional: Number of context lines around changes
+     "ignore_whitespace": "boolean",           // Optional: Whether to ignore whitespace in comparison
+     "new_content": "string",           // Optional: New content string to compare
+     "new_file": "string",           // Optional: Path to new file (alternative to new_content)
+     "old_content": "string",           // Optional: Original content string to compare
+     "old_file": "string",           // Optional: Path to original file (alternative to old_content)
+     "output_format": "string",           // Optional: Output format (unified, inline, changes)
+   }
+
+3. "code_analyzer": Analyze code structure and relationships in various programming languages
+   Parameters: {
+     "analysis_type": "string",           // Optional: Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)
+     "code": "string",           // Optional: Code content to analyze (alternative to file)
+     "detail_level": "string",           // Optional: Level of detail to include in results (low, medium, high)
+     "file": "string",           // Optional: Path to the file to analyze
+     "language": "string",           // Optional: Programming language of the code (required when using code content)
+   }
+
+4. "file_write": Writes content to a file at the specified path
+   Parameters: {
+     "append": "boolean",           // Optional: Whether to append to the file or overwrite it
+     "content": "string",           // The content to write to the file
+     "path": "string",           // The path to write the file to
+   }
+
+5. "test_runner": Runs tests and analyzes test results
+   Parameters: {
+     "framework": "string",           // Optional: Specific test framework to use
+     "path": "string",           // Directory or file to run tests on
+     "test_filter": "string",           // Optional: Specific test or pattern to run
+     "timeout_seconds": "number",           // Optional: Maximum execution time in seconds
+   }
+
+6. "grep": Search for patterns in file contents using regular expressions
+   Parameters: {
+     "case_sensitive": "boolean",           // Optional: Whether to perform case-sensitive matching
+     "context_lines": "integer",           // Optional: Number of context lines before and after matches
+     "exclude": "string",           // Optional: Glob pattern for files to exclude
+     "include": "string",           // Optional: Glob pattern for files to include (e.g. '*.rs')
+     "max_matches": "integer",           // Optional: Maximum number of matches to return
+     "path": "string",           // Optional: Directory to search in (defaults to current directory)
+     "pattern": "string",           // Regular expression pattern to search for
+     "recursive": "boolean",           // Optional: Whether to search recursively in subdirectories
+   }
+
+7. "find": Find files matching name patterns and criteria
+   Parameters: {
+     "base_dir": "string",           // Optional: Base directory for search (defaults to current directory)
+     "exclude": "string",           // Optional: Glob pattern for files to exclude
+     "include_dirs": "boolean",           // Optional: Whether to include directories in results
+     "max_depth": "integer",           // Optional: Maximum directory depth to search
+     "modified_after": "string",           // Optional: Only find files modified after this date (YYYY-MM-DD)
+     "modified_before": "string",           // Optional: Only find files modified before this date (YYYY-MM-DD)
+     "order": "string",           // Optional: Sort order (asc, desc)
+     "pattern": "string",           // Glob pattern to match files (e.g. '**/*.rs')
+     "sort_by": "string",           // Optional: Sort results by (name, size, modified_time)
+   }
+
+8. "patch": Apply patches to files using unified diff format
+   Parameters: {
+     "create_backup": "boolean",           // Optional: Whether to create a backup of the original file
+     "dry_run": "boolean",           // Optional: Whether to simulate the patch application without changing files
+     "ignore_whitespace": "boolean",           // Optional: Whether to ignore whitespace when applying the patch
+     "patch_content": "string",           // Patch content in unified diff format
+     "target_file": "string",           // Path to the file to patch
+   }
+
+9. "directory_list": Lists files and directories at the specified path
+   Parameters: {
+     "path": "string",           // The directory path to list
+   }
+
+10. "file_read": Reads the contents of a file at the specified path
+   Parameters: {
+     "path": "string",           // The path to the file to read
+   }
+
+11. "project": Analyzes project structure and dependencies
+   Parameters: {
+     "analyze_dependencies": "boolean",           // Optional: Whether to analyze project dependencies
+     "include_hidden": "boolean",           // Optional: Whether to include hidden files and directories
+     "max_depth": "integer",           // Optional: Maximum directory depth to analyze
+     "project_dir": "string",           // Path to the project root directory
+   }
+
+
+2025-05-05T16:56:07.476822Z DEBUG mcp_core::prompts: crates/mcp-core/src/prompts/mod.rs:210: Loading prompts from /Users/navicore/Library/Application Support/mcpterm/prompts
+2025-05-05T16:56:07.476878Z DEBUG mcp_core::prompts: crates/mcp-core/src/prompts/mod.rs:232: Loaded prompt: System
+2025-05-05T16:56:07.476896Z DEBUG mcp_core::prompts: crates/mcp-core/src/prompts/mod.rs:232: Loaded prompt: Initial
+2025-05-05T16:56:07.476913Z DEBUG mcp_core::prompts: crates/mcp-core/src/prompts/mod.rs:232: Loaded prompt: Tool("shell")
+2025-05-05T16:56:07.476936Z  INFO mcp_core::prompts: crates/mcp-core/src/prompts/mod.rs:263: Loaded 3 prompts from /Users/navicore/Library/Application Support/mcpterm/prompts
+2025-05-05T16:56:07.476941Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:243: Processing single prompt from command line argument
+2025-05-05T16:56:07.476951Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:53: Adding user message to conversation
+2025-05-05T16:56:07.476952Z TRACE mcp_core::context: crates/mcp-core/src/context/mod.rs:54: User message content: lets test. please edit the README.md file in the current directory and append a markdown section for example code and put something random in the markdown for demo purposes
+2025-05-05T16:56:07.476954Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:66: Conversation now has 1 messages
+2025-05-05T16:56:07.477073Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:294: Using system prompt with 7867 characters
+2025-05-05T16:56:07.477075Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:298: System prompt content: You are an AI assistant that follows the Model Context Protocol (MCP). 
+You MUST communicate using valid JSON in the JSON-RPC 2.0 format.
+
+Here are the rules:
+
+1. For regular responses, use:
+{
+  "jsonrpc": "2.0",
+  "result": "Your message here...",
+  "id": "<request_id>"
+}
+
+2. For tool calls, use:
+{
+  "jsonrpc": "2.0",
+  "method": "mcp.tool_call",
+  "params": {
+    "name": "<tool_name>",
+    "parameters": {
+      // Tool-specific parameters
+    }
+  },
+  "id": "<request_id>"
+}
+
+3. For errors, use:
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32000,
+    "message": "Error description"
+  },
+  "id": "<request_id>"
+}
+
+Examples of available tools:
+1. "shell": Execute a shell command
+   Parameters: { "command": "string" }
+
+2. "file_read": Read a file
+   Parameters: { "path": "string" }
+
+3. "file_write": Write to a file
+   Parameters: { "path": "string", "content": "string" }
+
+4. "search": Search for files or content
+   Parameters: { "query": "string", "path": "string" }
+
+Always ensure your responses are syntactically valid JSON. 
+Never include multiple JSON objects in a single response.
+If you require more information or the result of a tool call, make a tool call request and wait for the result.
+
+
+You are Claude, a helpful AI assistant by Anthropic. You will follow the Model Context Protocol (MCP) for structured communication.
+
+
+You are an AI assistant that follows the Model Context Protocol (MCP).
+You MUST communicate using valid JSON in the JSON-RPC 2.0 format.
+
+Here are the rules:
+
+1. For regular responses, use:
+{
+  "jsonrpc": "2.0",
+  "result": "Your message here...",
+  "id": "<request_id>"
+}
+
+2. For tool calls, use:
+{
+  "jsonrpc": "2.0",
+  "method": "mcp.tool_call",
+  "params": {
+    "name": "<tool_name>",
+    "parameters": {
+      // Tool-specific parameters
+    }
+  },
+  "id": "<request_id>"
+}
+
+3. For errors, use:
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32000,
+    "message": "Error description"
+  },
+  "id": "<request_id>"
+}
+
+Available tools:
+
+Available tools:
+
+1. "shell": Executes shell commands with configurable timeout
+   Parameters: {
+     "command": "string",           // The shell command to execute
+     "timeout": "integer",           // Optional: Command timeout in milliseconds
+   }
+
+2. "diff": Compare two files or text strings and show differences
+   Parameters: {
+     "context_lines": "integer",           // Optional: Number of context lines around changes
+     "ignore_whitespace": "boolean",           // Optional: Whether to ignore whitespace in comparison
+     "new_content": "string",           // Optional: New content string to compare
+     "new_file": "string",           // Optional: Path to new file (alternative to new_content)
+     "old_content": "string",           // Optional: Original content string to compare
+     "old_file": "string",           // Optional: Path to original file (alternative to old_content)
+     "output_format": "string",           // Optional: Output format (unified, inline, changes)
+   }
+
+3. "code_analyzer": Analyze code structure and relationships in various programming languages
+   Parameters: {
+     "analysis_type": "string",           // Optional: Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)
+     "code": "string",           // Optional: Code content to analyze (alternative to file)
+     "detail_level": "string",           // Optional: Level of detail to include in results (low, medium, high)
+     "file": "string",           // Optional: Path to the file to analyze
+     "language": "string",           // Optional: Programming language of the code (required when using code content)
+   }
+
+4. "file_write": Writes content to a file at the specified path
+   Parameters: {
+     "append": "boolean",           // Optional: Whether to append to the file or overwrite it
+     "content": "string",           // The content to write to the file
+     "path": "string",           // The path to write the file to
+   }
+
+5. "test_runner": Runs tests and analyzes test results
+   Parameters: {
+     "framework": "string",           // Optional: Specific test framework to use
+     "path": "string",           // Directory or file to run tests on
+     "test_filter": "string",           // Optional: Specific test or pattern to run
+     "timeout_seconds": "number",           // Optional: Maximum execution time in seconds
+   }
+
+6. "grep": Search for patterns in file contents using regular expressions
+   Parameters: {
+     "case_sensitive": "boolean",           // Optional: Whether to perform case-sensitive matching
+     "context_lines": "integer",           // Optional: Number of context lines before and after matches
+     "exclude": "string",           // Optional: Glob pattern for files to exclude
+     "include": "string",           // Optional: Glob pattern for files to include (e.g. '*.rs')
+     "max_matches": "integer",           // Optional: Maximum number of matches to return
+     "path": "string",           // Optional: Directory to search in (defaults to current directory)
+     "pattern": "string",           // Regular expression pattern to search for
+     "recursive": "boolean",           // Optional: Whether to search recursively in subdirectories
+   }
+
+7. "find": Find files matching name patterns and criteria
+   Parameters: {
+     "base_dir": "string",           // Optional: Base directory for search (defaults to current directory)
+     "exclude": "string",           // Optional: Glob pattern for files to exclude
+     "include_dirs": "boolean",           // Optional: Whether to include directories in results
+     "max_depth": "integer",           // Optional: Maximum directory depth to search
+     "modified_after": "string",           // Optional: Only find files modified after this date (YYYY-MM-DD)
+     "modified_before": "string",           // Optional: Only find files modified before this date (YYYY-MM-DD)
+     "order": "string",           // Optional: Sort order (asc, desc)
+     "pattern": "string",           // Glob pattern to match files (e.g. '**/*.rs')
+     "sort_by": "string",           // Optional: Sort results by (name, size, modified_time)
+   }
+
+8. "patch": Apply patches to files using unified diff format
+   Parameters: {
+     "create_backup": "boolean",           // Optional: Whether to create a backup of the original file
+     "dry_run": "boolean",           // Optional: Whether to simulate the patch application without changing files
+     "ignore_whitespace": "boolean",           // Optional: Whether to ignore whitespace when applying the patch
+     "patch_content": "string",           // Patch content in unified diff format
+     "target_file": "string",           // Path to the file to patch
+   }
+
+9. "directory_list": Lists files and directories at the specified path
+   Parameters: {
+     "path": "string",           // The directory path to list
+   }
+
+10. "file_read": Reads the contents of a file at the specified path
+   Parameters: {
+     "path": "string",           // The path to the file to read
+   }
+
+11. "project": Analyzes project structure and dependencies
+   Parameters: {
+     "analyze_dependencies": "boolean",           // Optional: Whether to analyze project dependencies
+     "include_hidden": "boolean",           // Optional: Whether to include hidden files and directories
+     "max_depth": "integer",           // Optional: Maximum directory depth to analyze
+     "project_dir": "string",           // Path to the project root directory
+   }
+
+
+
+Always ensure your responses are syntactically valid JSON.
+Never include multiple JSON objects in a single response.
+If you require more information or the result of a tool call, make a tool call request and wait for the result.
+
+When working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code
+before making changes or executing commands.
+
+2025-05-05T16:56:07.477104Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:676: Sending streaming request to Bedrock: us.anthropic.claude-3-7-sonnet-20250219-v1:0
+2025-05-05T16:56:07.477108Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:680: Request payload: {"anthropic_version":"bedrock-2023-05-31","max_tokens":4096,"messages":[{"role":"user","content":[{"type":"text","text":"lets test. please edit the README.md file in the current directory and append a markdown section for example code and put something random in the markdown for demo purposes"}]}],"system":"You are an AI assistant that follows the Model Context Protocol (MCP). \nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nExamples of available tools:\n1. \"shell\": Execute a shell command\n   Parameters: { \"command\": \"string\" }\n\n2. \"file_read\": Read a file\n   Parameters: { \"path\": \"string\" }\n\n3. \"file_write\": Write to a file\n   Parameters: { \"path\": \"string\", \"content\": \"string\" }\n\n4. \"search\": Search for files or content\n   Parameters: { \"query\": \"string\", \"path\": \"string\" }\n\nAlways ensure your responses are syntactically valid JSON. \nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\n\nYou are Claude, a helpful AI assistant by Anthropic. You will follow the Model Context Protocol (MCP) for structured communication.\n\n\nYou are an AI assistant that follows the Model Context Protocol (MCP).\nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nAvailable tools:\n\nAvailable tools:\n\n1. \"shell\": Executes shell commands with configurable timeout\n   Parameters: {\n     \"command\": \"string\",           // The shell command to execute\n     \"timeout\": \"integer\",           // Optional: Command timeout in milliseconds\n   }\n\n2. \"diff\": Compare two files or text strings and show differences\n   Parameters: {\n     \"context_lines\": \"integer\",           // Optional: Number of context lines around changes\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace in comparison\n     \"new_content\": \"string\",           // Optional: New content string to compare\n     \"new_file\": \"string\",           // Optional: Path to new file (alternative to new_content)\n     \"old_content\": \"string\",           // Optional: Original content string to compare\n     \"old_file\": \"string\",           // Optional: Path to original file (alternative to old_content)\n     \"output_format\": \"string\",           // Optional: Output format (unified, inline, changes)\n   }\n\n3. \"code_analyzer\": Analyze code structure and relationships in various programming languages\n   Parameters: {\n     \"analysis_type\": \"string\",           // Optional: Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)\n     \"code\": \"string\",           // Optional: Code content to analyze (alternative to file)\n     \"detail_level\": \"string\",           // Optional: Level of detail to include in results (low, medium, high)\n     \"file\": \"string\",           // Optional: Path to the file to analyze\n     \"language\": \"string\",           // Optional: Programming language of the code (required when using code content)\n   }\n\n4. \"file_write\": Writes content to a file at the specified path\n   Parameters: {\n     \"append\": \"boolean\",           // Optional: Whether to append to the file or overwrite it\n     \"content\": \"string\",           // The content to write to the file\n     \"path\": \"string\",           // The path to write the file to\n   }\n\n5. \"test_runner\": Runs tests and analyzes test results\n   Parameters: {\n     \"framework\": \"string\",           // Optional: Specific test framework to use\n     \"path\": \"string\",           // Directory or file to run tests on\n     \"test_filter\": \"string\",           // Optional: Specific test or pattern to run\n     \"timeout_seconds\": \"number\",           // Optional: Maximum execution time in seconds\n   }\n\n6. \"grep\": Search for patterns in file contents using regular expressions\n   Parameters: {\n     \"case_sensitive\": \"boolean\",           // Optional: Whether to perform case-sensitive matching\n     \"context_lines\": \"integer\",           // Optional: Number of context lines before and after matches\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include\": \"string\",           // Optional: Glob pattern for files to include (e.g. '*.rs')\n     \"max_matches\": \"integer\",           // Optional: Maximum number of matches to return\n     \"path\": \"string\",           // Optional: Directory to search in (defaults to current directory)\n     \"pattern\": \"string\",           // Regular expression pattern to search for\n     \"recursive\": \"boolean\",           // Optional: Whether to search recursively in subdirectories\n   }\n\n7. \"find\": Find files matching name patterns and criteria\n   Parameters: {\n     \"base_dir\": \"string\",           // Optional: Base directory for search (defaults to current directory)\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include_dirs\": \"boolean\",           // Optional: Whether to include directories in results\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to search\n     \"modified_after\": \"string\",           // Optional: Only find files modified after this date (YYYY-MM-DD)\n     \"modified_before\": \"string\",           // Optional: Only find files modified before this date (YYYY-MM-DD)\n     \"order\": \"string\",           // Optional: Sort order (asc, desc)\n     \"pattern\": \"string\",           // Glob pattern to match files (e.g. '**/*.rs')\n     \"sort_by\": \"string\",           // Optional: Sort results by (name, size, modified_time)\n   }\n\n8. \"patch\": Apply patches to files using unified diff format\n   Parameters: {\n     \"create_backup\": \"boolean\",           // Optional: Whether to create a backup of the original file\n     \"dry_run\": \"boolean\",           // Optional: Whether to simulate the patch application without changing files\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace when applying the patch\n     \"patch_content\": \"string\",           // Patch content in unified diff format\n     \"target_file\": \"string\",           // Path to the file to patch\n   }\n\n9. \"directory_list\": Lists files and directories at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The directory path to list\n   }\n\n10. \"file_read\": Reads the contents of a file at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The path to the file to read\n   }\n\n11. \"project\": Analyzes project structure and dependencies\n   Parameters: {\n     \"analyze_dependencies\": \"boolean\",           // Optional: Whether to analyze project dependencies\n     \"include_hidden\": \"boolean\",           // Optional: Whether to include hidden files and directories\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to analyze\n     \"project_dir\": \"string\",           // Path to the project root directory\n   }\n\n\n\nAlways ensure your responses are syntactically valid JSON.\nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\nWhen working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code\nbefore making changes or executing commands.\n","temperature":0.7,"top_p":0.9}
+2025-05-05T16:56:07.477129Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:686: Raw streaming JSON request payload to Bedrock: {
+  "anthropic_version": "bedrock-2023-05-31",
+  "max_tokens": 4096,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "lets test. please edit the README.md file in the current directory and append a markdown section for example code and put something random in the markdown for demo purposes"
+        }
+      ]
+    }
+  ],
+  "system": "You are an AI assistant that follows the Model Context Protocol (MCP). \nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nExamples of available tools:\n1. \"shell\": Execute a shell command\n   Parameters: { \"command\": \"string\" }\n\n2. \"file_read\": Read a file\n   Parameters: { \"path\": \"string\" }\n\n3. \"file_write\": Write to a file\n   Parameters: { \"path\": \"string\", \"content\": \"string\" }\n\n4. \"search\": Search for files or content\n   Parameters: { \"query\": \"string\", \"path\": \"string\" }\n\nAlways ensure your responses are syntactically valid JSON. \nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\n\nYou are Claude, a helpful AI assistant by Anthropic. You will follow the Model Context Protocol (MCP) for structured communication.\n\n\nYou are an AI assistant that follows the Model Context Protocol (MCP).\nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nAvailable tools:\n\nAvailable tools:\n\n1. \"shell\": Executes shell commands with configurable timeout\n   Parameters: {\n     \"command\": \"string\",           // The shell command to execute\n     \"timeout\": \"integer\",           // Optional: Command timeout in milliseconds\n   }\n\n2. \"diff\": Compare two files or text strings and show differences\n   Parameters: {\n     \"context_lines\": \"integer\",           // Optional: Number of context lines around changes\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace in comparison\n     \"new_content\": \"string\",           // Optional: New content string to compare\n     \"new_file\": \"string\",           // Optional: Path to new file (alternative to new_content)\n     \"old_content\": \"string\",           // Optional: Original content string to compare\n     \"old_file\": \"string\",           // Optional: Path to original file (alternative to old_content)\n     \"output_format\": \"string\",           // Optional: Output format (unified, inline, changes)\n   }\n\n3. \"code_analyzer\": Analyze code structure and relationships in various programming languages\n   Parameters: {\n     \"analysis_type\": \"string\",           // Optional: Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)\n     \"code\": \"string\",           // Optional: Code content to analyze (alternative to file)\n     \"detail_level\": \"string\",           // Optional: Level of detail to include in results (low, medium, high)\n     \"file\": \"string\",           // Optional: Path to the file to analyze\n     \"language\": \"string\",           // Optional: Programming language of the code (required when using code content)\n   }\n\n4. \"file_write\": Writes content to a file at the specified path\n   Parameters: {\n     \"append\": \"boolean\",           // Optional: Whether to append to the file or overwrite it\n     \"content\": \"string\",           // The content to write to the file\n     \"path\": \"string\",           // The path to write the file to\n   }\n\n5. \"test_runner\": Runs tests and analyzes test results\n   Parameters: {\n     \"framework\": \"string\",           // Optional: Specific test framework to use\n     \"path\": \"string\",           // Directory or file to run tests on\n     \"test_filter\": \"string\",           // Optional: Specific test or pattern to run\n     \"timeout_seconds\": \"number\",           // Optional: Maximum execution time in seconds\n   }\n\n6. \"grep\": Search for patterns in file contents using regular expressions\n   Parameters: {\n     \"case_sensitive\": \"boolean\",           // Optional: Whether to perform case-sensitive matching\n     \"context_lines\": \"integer\",           // Optional: Number of context lines before and after matches\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include\": \"string\",           // Optional: Glob pattern for files to include (e.g. '*.rs')\n     \"max_matches\": \"integer\",           // Optional: Maximum number of matches to return\n     \"path\": \"string\",           // Optional: Directory to search in (defaults to current directory)\n     \"pattern\": \"string\",           // Regular expression pattern to search for\n     \"recursive\": \"boolean\",           // Optional: Whether to search recursively in subdirectories\n   }\n\n7. \"find\": Find files matching name patterns and criteria\n   Parameters: {\n     \"base_dir\": \"string\",           // Optional: Base directory for search (defaults to current directory)\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include_dirs\": \"boolean\",           // Optional: Whether to include directories in results\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to search\n     \"modified_after\": \"string\",           // Optional: Only find files modified after this date (YYYY-MM-DD)\n     \"modified_before\": \"string\",           // Optional: Only find files modified before this date (YYYY-MM-DD)\n     \"order\": \"string\",           // Optional: Sort order (asc, desc)\n     \"pattern\": \"string\",           // Glob pattern to match files (e.g. '**/*.rs')\n     \"sort_by\": \"string\",           // Optional: Sort results by (name, size, modified_time)\n   }\n\n8. \"patch\": Apply patches to files using unified diff format\n   Parameters: {\n     \"create_backup\": \"boolean\",           // Optional: Whether to create a backup of the original file\n     \"dry_run\": \"boolean\",           // Optional: Whether to simulate the patch application without changing files\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace when applying the patch\n     \"patch_content\": \"string\",           // Patch content in unified diff format\n     \"target_file\": \"string\",           // Path to the file to patch\n   }\n\n9. \"directory_list\": Lists files and directories at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The directory path to list\n   }\n\n10. \"file_read\": Reads the contents of a file at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The path to the file to read\n   }\n\n11. \"project\": Analyzes project structure and dependencies\n   Parameters: {\n     \"analyze_dependencies\": \"boolean\",           // Optional: Whether to analyze project dependencies\n     \"include_hidden\": \"boolean\",           // Optional: Whether to include hidden files and directories\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to analyze\n     \"project_dir\": \"string\",           // Path to the project root directory\n   }\n\n\n\nAlways ensure your responses are syntactically valid JSON.\nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\nWhen working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code\nbefore making changes or executing commands.\n",
+  "temperature": 0.7,
+  "top_p": 0.9
+}
+2025-05-05T16:56:07.477131Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:693: Streaming Message[0] role=user, content=[
+  {
+    "type": "text",
+    "text": "lets test. please edit the README.md file in the current directory and append a markdown section for example code and put something random in the markdown for demo purposes"
+  }
+]
+2025-05-05T16:56:07.477177Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:735: We're not using streaming for now, using regular invoke_model
+2025-05-05T16:56:07.477182Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:736: In AWS SDK 1.x, the streaming APIs are difficult to work with
+2025-05-05T16:56:07.477373Z  INFO aws_config::profile::credentials: /Users/navicore/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-config-1.6.2/src/profile/credentials.rs:510: constructed abstract provider from config file chain=ProfileChain { base: AccessKey(Credentials { provider_name: "ProfileFile", access_key_id: "AKIA22WOUKW4AWKYTR3V", secret_access_key: "** redacted **", expires_after: "never" }), chain: [] }
+2025-05-05T16:56:07.477378Z  INFO aws_config::profile::credentials: /Users/navicore/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-config-1.6.2/src/profile/credentials.rs:534: loaded base credentials creds=Credentials { provider_name: "ProfileFile", access_key_id: "AKIA22WOUKW4AWKYTR3V", secret_access_key: "** redacted **", expires_after: "never" }
+2025-05-05T16:56:13.063222Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:778: Received response from Bedrock
+2025-05-05T16:56:13.063262Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:784: Raw JSON streaming response from Bedrock: {"id":"msg_bdrk_01CLY2TYsBZ4vH1DB6yKs7pg","type":"message","role":"assistant","model":"claude-3-7-sonnet-20250219","content":[{"type":"text","text":"I'll help you edit the README.md file by appending a markdown section with example code. First, let's check if the README.md file exists and what it currently contains.\n\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"file_read\",\n    \"parameters\": {\n      \"path\": \"README.md\"\n    }\n  },\n  \"id\": \"check_readme\"\n}"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":2084,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":118}}
+2025-05-05T16:56:13.063376Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:800: Successfully parsed Claude response: "msg_bdrk_01CLY2TYsBZ4vH1DB6yKs7pg"
+2025-05-05T16:56:13.063392Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:806: Parsed Claude streaming response structure: {
+  "id": "msg_bdrk_01CLY2TYsBZ4vH1DB6yKs7pg",
+  "content": [
+    {
+      "type": "text",
+      "text": "I'll help you edit the README.md file by appending a markdown section with example code. First, let's check if the README.md file exists and what it currently contains.\n\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"file_read\",\n    \"parameters\": {\n      \"path\": \"README.md\"\n    }\n  },\n  \"id\": \"check_readme\"\n}"
+    }
+  ],
+  "model": "claude-3-7-sonnet-20250219",
+  "role": "assistant",
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 2084,
+    "output_tokens": 118
+  },
+  "type_": null
+}
+2025-05-05T16:56:13.063558Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:578: Final chunk received
+2025-05-05T16:56:13.063623Z DEBUG mcp_core::protocol::validation: crates/mcp-core/src/protocol/validation.rs:50: Validating LLM response format
+2025-05-05T16:56:13.063656Z  WARN mcp_core::protocol::validation: crates/mcp-core/src/protocol/validation.rs:78: Response contains both text and valid JSON-RPC
+2025-05-05T16:56:13.063678Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:441: Response contains both text and valid JSON-RPC
+2025-05-05T16:56:13.063692Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:70: Adding assistant message to conversation
+2025-05-05T16:56:13.063695Z TRACE mcp_core::context: crates/mcp-core/src/context/mod.rs:71: Assistant message content: I'll help you edit the README.md file by appending a markdown section with example code. First, let's check if the README.md file exists and what it currently contains.
+2025-05-05T16:56:13.063699Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:83: Conversation now has 2 messages
+2025-05-05T16:56:13.063705Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:1459: Processing tool call from mixed content: file_read
+2025-05-05T16:56:13.063707Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:70: Adding assistant message to conversation
+2025-05-05T16:56:13.063708Z TRACE mcp_core::context: crates/mcp-core/src/context/mod.rs:71: Assistant message content: Executing embedded tool: file_read
+2025-05-05T16:56:13.063710Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:83: Conversation now has 3 messages
+2025-05-05T16:56:13.063712Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:1160: Tool call received: ToolCall { id: "check_readme", tool: "file_read", params: Object {"path": String("README.md")} }
+2025-05-05T16:56:13.063720Z  INFO mcpterm_cli: crates/mcpterm-cli/src/lib.rs:1167: Processing tool call: file_read
+2025-05-05T16:56:13.063724Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:194: Executing tool: file_read with params: {"path":"README.md"}
+2025-05-05T16:56:16.454936Z  INFO mcp_tools::filesystem: crates/mcp-tools/src/filesystem/mod.rs:211: Reading file: README.md
+2025-05-05T16:56:16.455492Z DEBUG mcp_tools::filesystem: crates/mcp-tools/src/filesystem/mod.rs:214: Successfully read file: README.md (422 bytes)
+2025-05-05T16:56:16.455591Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:1190: Adding tool result to context: {"jsonrpc": "2.0", "result": {"content":"# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n","size":422}, "id": "tool_result"}
+2025-05-05T16:56:16.455611Z TRACE mcpterm_cli: crates/mcpterm-cli/src/lib.rs:1196: >>> TOOL RESULT JSON-RPC TO LLM >>>
+{
+  "tool_id": "file_read",
+  "status": "Success",
+  "output": {
+    "content": "# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n",
+    "size": 422
+  },
+  "error": null
+}
+2025-05-05T16:56:16.455614Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:87: Adding tool message to conversation
+2025-05-05T16:56:16.455616Z TRACE mcp_core::context: crates/mcp-core/src/context/mod.rs:88: Tool message content: {"jsonrpc": "2.0", "result": {"content":"# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n","size":422}, "id": "tool_result"}
+2025-05-05T16:56:16.455625Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:100: Conversation now has 4 messages
+2025-05-05T16:56:16.455630Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:620: Getting follow-up response with tool results...
+2025-05-05T16:56:16.456064Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:294: Using system prompt with 7867 characters
+2025-05-05T16:56:16.456081Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:298: System prompt content: You are an AI assistant that follows the Model Context Protocol (MCP). 
+You MUST communicate using valid JSON in the JSON-RPC 2.0 format.
+
+Here are the rules:
+
+1. For regular responses, use:
+{
+  "jsonrpc": "2.0",
+  "result": "Your message here...",
+  "id": "<request_id>"
+}
+
+2. For tool calls, use:
+{
+  "jsonrpc": "2.0",
+  "method": "mcp.tool_call",
+  "params": {
+    "name": "<tool_name>",
+    "parameters": {
+      // Tool-specific parameters
+    }
+  },
+  "id": "<request_id>"
+}
+
+3. For errors, use:
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32000,
+    "message": "Error description"
+  },
+  "id": "<request_id>"
+}
+
+Examples of available tools:
+1. "shell": Execute a shell command
+   Parameters: { "command": "string" }
+
+2. "file_read": Read a file
+   Parameters: { "path": "string" }
+
+3. "file_write": Write to a file
+   Parameters: { "path": "string", "content": "string" }
+
+4. "search": Search for files or content
+   Parameters: { "query": "string", "path": "string" }
+
+Always ensure your responses are syntactically valid JSON. 
+Never include multiple JSON objects in a single response.
+If you require more information or the result of a tool call, make a tool call request and wait for the result.
+
+
+You are Claude, a helpful AI assistant by Anthropic. You will follow the Model Context Protocol (MCP) for structured communication.
+
+
+You are an AI assistant that follows the Model Context Protocol (MCP).
+You MUST communicate using valid JSON in the JSON-RPC 2.0 format.
+
+Here are the rules:
+
+1. For regular responses, use:
+{
+  "jsonrpc": "2.0",
+  "result": "Your message here...",
+  "id": "<request_id>"
+}
+
+2. For tool calls, use:
+{
+  "jsonrpc": "2.0",
+  "method": "mcp.tool_call",
+  "params": {
+    "name": "<tool_name>",
+    "parameters": {
+      // Tool-specific parameters
+    }
+  },
+  "id": "<request_id>"
+}
+
+3. For errors, use:
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32000,
+    "message": "Error description"
+  },
+  "id": "<request_id>"
+}
+
+Available tools:
+
+Available tools:
+
+1. "shell": Executes shell commands with configurable timeout
+   Parameters: {
+     "command": "string",           // The shell command to execute
+     "timeout": "integer",           // Optional: Command timeout in milliseconds
+   }
+
+2. "diff": Compare two files or text strings and show differences
+   Parameters: {
+     "context_lines": "integer",           // Optional: Number of context lines around changes
+     "ignore_whitespace": "boolean",           // Optional: Whether to ignore whitespace in comparison
+     "new_content": "string",           // Optional: New content string to compare
+     "new_file": "string",           // Optional: Path to new file (alternative to new_content)
+     "old_content": "string",           // Optional: Original content string to compare
+     "old_file": "string",           // Optional: Path to original file (alternative to old_content)
+     "output_format": "string",           // Optional: Output format (unified, inline, changes)
+   }
+
+3. "code_analyzer": Analyze code structure and relationships in various programming languages
+   Parameters: {
+     "analysis_type": "string",           // Optional: Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)
+     "code": "string",           // Optional: Code content to analyze (alternative to file)
+     "detail_level": "string",           // Optional: Level of detail to include in results (low, medium, high)
+     "file": "string",           // Optional: Path to the file to analyze
+     "language": "string",           // Optional: Programming language of the code (required when using code content)
+   }
+
+4. "file_write": Writes content to a file at the specified path
+   Parameters: {
+     "append": "boolean",           // Optional: Whether to append to the file or overwrite it
+     "content": "string",           // The content to write to the file
+     "path": "string",           // The path to write the file to
+   }
+
+5. "test_runner": Runs tests and analyzes test results
+   Parameters: {
+     "framework": "string",           // Optional: Specific test framework to use
+     "path": "string",           // Directory or file to run tests on
+     "test_filter": "string",           // Optional: Specific test or pattern to run
+     "timeout_seconds": "number",           // Optional: Maximum execution time in seconds
+   }
+
+6. "grep": Search for patterns in file contents using regular expressions
+   Parameters: {
+     "case_sensitive": "boolean",           // Optional: Whether to perform case-sensitive matching
+     "context_lines": "integer",           // Optional: Number of context lines before and after matches
+     "exclude": "string",           // Optional: Glob pattern for files to exclude
+     "include": "string",           // Optional: Glob pattern for files to include (e.g. '*.rs')
+     "max_matches": "integer",           // Optional: Maximum number of matches to return
+     "path": "string",           // Optional: Directory to search in (defaults to current directory)
+     "pattern": "string",           // Regular expression pattern to search for
+     "recursive": "boolean",           // Optional: Whether to search recursively in subdirectories
+   }
+
+7. "find": Find files matching name patterns and criteria
+   Parameters: {
+     "base_dir": "string",           // Optional: Base directory for search (defaults to current directory)
+     "exclude": "string",           // Optional: Glob pattern for files to exclude
+     "include_dirs": "boolean",           // Optional: Whether to include directories in results
+     "max_depth": "integer",           // Optional: Maximum directory depth to search
+     "modified_after": "string",           // Optional: Only find files modified after this date (YYYY-MM-DD)
+     "modified_before": "string",           // Optional: Only find files modified before this date (YYYY-MM-DD)
+     "order": "string",           // Optional: Sort order (asc, desc)
+     "pattern": "string",           // Glob pattern to match files (e.g. '**/*.rs')
+     "sort_by": "string",           // Optional: Sort results by (name, size, modified_time)
+   }
+
+8. "patch": Apply patches to files using unified diff format
+   Parameters: {
+     "create_backup": "boolean",           // Optional: Whether to create a backup of the original file
+     "dry_run": "boolean",           // Optional: Whether to simulate the patch application without changing files
+     "ignore_whitespace": "boolean",           // Optional: Whether to ignore whitespace when applying the patch
+     "patch_content": "string",           // Patch content in unified diff format
+     "target_file": "string",           // Path to the file to patch
+   }
+
+9. "directory_list": Lists files and directories at the specified path
+   Parameters: {
+     "path": "string",           // The directory path to list
+   }
+
+10. "file_read": Reads the contents of a file at the specified path
+   Parameters: {
+     "path": "string",           // The path to the file to read
+   }
+
+11. "project": Analyzes project structure and dependencies
+   Parameters: {
+     "analyze_dependencies": "boolean",           // Optional: Whether to analyze project dependencies
+     "include_hidden": "boolean",           // Optional: Whether to include hidden files and directories
+     "max_depth": "integer",           // Optional: Maximum directory depth to analyze
+     "project_dir": "string",           // Path to the project root directory
+   }
+
+
+
+Always ensure your responses are syntactically valid JSON.
+Never include multiple JSON objects in a single response.
+If you require more information or the result of a tool call, make a tool call request and wait for the result.
+
+When working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code
+before making changes or executing commands.
+
+2025-05-05T16:56:16.456095Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:309: Converting tool message to specialized assistant message: {"jsonrpc": "2.0", "result": {"content":"# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n","size":422}, "id": "tool_result"}
+2025-05-05T16:56:16.456111Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:319: Tool result JSON: {
+  "id": "tool_result",
+  "jsonrpc": "2.0",
+  "result": {
+    "content": "# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n",
+    "size": 422
+  }
+}
+2025-05-05T16:56:16.456117Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:332: Created specialized tool result message: I've received the following tool result:
+```json
+{
+  "content": "# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n",
+  "size": 422
+}
+```
+
+Now I need to provide a direct answer based on this result.
+2025-05-05T16:56:16.456162Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:676: Sending streaming request to Bedrock: us.anthropic.claude-3-7-sonnet-20250219-v1:0
+2025-05-05T16:56:16.456174Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:680: Request payload: {"anthropic_version":"bedrock-2023-05-31","max_tokens":4096,"messages":[{"role":"user","content":[{"type":"text","text":"lets test. please edit the README.md file in the current directory and append a markdown section for example code and put something random in the markdown for demo purposes"}]},{"role":"assistant","content":[{"type":"text","text":"I'll help you edit the README.md file by appending a markdown section with example code. First, let's check if the README.md file exists and what it currently contains."}]},{"role":"assistant","content":[{"type":"text","text":"Executing embedded tool: file_read"}]},{"role":"assistant","content":[{"type":"text","text":"I've received the following tool result:\n```json\n{\n  \"content\": \"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\",\n  \"size\": 422\n}\n```\n\nNow I need to provide a direct answer based on this result."}]}],"system":"You are an AI assistant that follows the Model Context Protocol (MCP). \nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nExamples of available tools:\n1. \"shell\": Execute a shell command\n   Parameters: { \"command\": \"string\" }\n\n2. \"file_read\": Read a file\n   Parameters: { \"path\": \"string\" }\n\n3. \"file_write\": Write to a file\n   Parameters: { \"path\": \"string\", \"content\": \"string\" }\n\n4. \"search\": Search for files or content\n   Parameters: { \"query\": \"string\", \"path\": \"string\" }\n\nAlways ensure your responses are syntactically valid JSON. \nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\n\nYou are Claude, a helpful AI assistant by Anthropic. You will follow the Model Context Protocol (MCP) for structured communication.\n\n\nYou are an AI assistant that follows the Model Context Protocol (MCP).\nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nAvailable tools:\n\nAvailable tools:\n\n1. \"shell\": Executes shell commands with configurable timeout\n   Parameters: {\n     \"command\": \"string\",           // The shell command to execute\n     \"timeout\": \"integer\",           // Optional: Command timeout in milliseconds\n   }\n\n2. \"diff\": Compare two files or text strings and show differences\n   Parameters: {\n     \"context_lines\": \"integer\",           // Optional: Number of context lines around changes\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace in comparison\n     \"new_content\": \"string\",           // Optional: New content string to compare\n     \"new_file\": \"string\",           // Optional: Path to new file (alternative to new_content)\n     \"old_content\": \"string\",           // Optional: Original content string to compare\n     \"old_file\": \"string\",           // Optional: Path to original file (alternative to old_content)\n     \"output_format\": \"string\",           // Optional: Output format (unified, inline, changes)\n   }\n\n3. \"code_analyzer\": Analyze code structure and relationships in various programming languages\n   Parameters: {\n     \"analysis_type\": \"string\",           // Optional: Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)\n     \"code\": \"string\",           // Optional: Code content to analyze (alternative to file)\n     \"detail_level\": \"string\",           // Optional: Level of detail to include in results (low, medium, high)\n     \"file\": \"string\",           // Optional: Path to the file to analyze\n     \"language\": \"string\",           // Optional: Programming language of the code (required when using code content)\n   }\n\n4. \"file_write\": Writes content to a file at the specified path\n   Parameters: {\n     \"append\": \"boolean\",           // Optional: Whether to append to the file or overwrite it\n     \"content\": \"string\",           // The content to write to the file\n     \"path\": \"string\",           // The path to write the file to\n   }\n\n5. \"test_runner\": Runs tests and analyzes test results\n   Parameters: {\n     \"framework\": \"string\",           // Optional: Specific test framework to use\n     \"path\": \"string\",           // Directory or file to run tests on\n     \"test_filter\": \"string\",           // Optional: Specific test or pattern to run\n     \"timeout_seconds\": \"number\",           // Optional: Maximum execution time in seconds\n   }\n\n6. \"grep\": Search for patterns in file contents using regular expressions\n   Parameters: {\n     \"case_sensitive\": \"boolean\",           // Optional: Whether to perform case-sensitive matching\n     \"context_lines\": \"integer\",           // Optional: Number of context lines before and after matches\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include\": \"string\",           // Optional: Glob pattern for files to include (e.g. '*.rs')\n     \"max_matches\": \"integer\",           // Optional: Maximum number of matches to return\n     \"path\": \"string\",           // Optional: Directory to search in (defaults to current directory)\n     \"pattern\": \"string\",           // Regular expression pattern to search for\n     \"recursive\": \"boolean\",           // Optional: Whether to search recursively in subdirectories\n   }\n\n7. \"find\": Find files matching name patterns and criteria\n   Parameters: {\n     \"base_dir\": \"string\",           // Optional: Base directory for search (defaults to current directory)\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include_dirs\": \"boolean\",           // Optional: Whether to include directories in results\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to search\n     \"modified_after\": \"string\",           // Optional: Only find files modified after this date (YYYY-MM-DD)\n     \"modified_before\": \"string\",           // Optional: Only find files modified before this date (YYYY-MM-DD)\n     \"order\": \"string\",           // Optional: Sort order (asc, desc)\n     \"pattern\": \"string\",           // Glob pattern to match files (e.g. '**/*.rs')\n     \"sort_by\": \"string\",           // Optional: Sort results by (name, size, modified_time)\n   }\n\n8. \"patch\": Apply patches to files using unified diff format\n   Parameters: {\n     \"create_backup\": \"boolean\",           // Optional: Whether to create a backup of the original file\n     \"dry_run\": \"boolean\",           // Optional: Whether to simulate the patch application without changing files\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace when applying the patch\n     \"patch_content\": \"string\",           // Patch content in unified diff format\n     \"target_file\": \"string\",           // Path to the file to patch\n   }\n\n9. \"directory_list\": Lists files and directories at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The directory path to list\n   }\n\n10. \"file_read\": Reads the contents of a file at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The path to the file to read\n   }\n\n11. \"project\": Analyzes project structure and dependencies\n   Parameters: {\n     \"analyze_dependencies\": \"boolean\",           // Optional: Whether to analyze project dependencies\n     \"include_hidden\": \"boolean\",           // Optional: Whether to include hidden files and directories\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to analyze\n     \"project_dir\": \"string\",           // Path to the project root directory\n   }\n\n\n\nAlways ensure your responses are syntactically valid JSON.\nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\nWhen working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code\nbefore making changes or executing commands.\n","temperature":0.7,"top_p":0.9}
+2025-05-05T16:56:16.456208Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:686: Raw streaming JSON request payload to Bedrock: {
+  "anthropic_version": "bedrock-2023-05-31",
+  "max_tokens": 4096,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "lets test. please edit the README.md file in the current directory and append a markdown section for example code and put something random in the markdown for demo purposes"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "I'll help you edit the README.md file by appending a markdown section with example code. First, let's check if the README.md file exists and what it currently contains."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Executing embedded tool: file_read"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "I've received the following tool result:\n```json\n{\n  \"content\": \"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\",\n  \"size\": 422\n}\n```\n\nNow I need to provide a direct answer based on this result."
+        }
+      ]
+    }
+  ],
+  "system": "You are an AI assistant that follows the Model Context Protocol (MCP). \nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nExamples of available tools:\n1. \"shell\": Execute a shell command\n   Parameters: { \"command\": \"string\" }\n\n2. \"file_read\": Read a file\n   Parameters: { \"path\": \"string\" }\n\n3. \"file_write\": Write to a file\n   Parameters: { \"path\": \"string\", \"content\": \"string\" }\n\n4. \"search\": Search for files or content\n   Parameters: { \"query\": \"string\", \"path\": \"string\" }\n\nAlways ensure your responses are syntactically valid JSON. \nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\n\nYou are Claude, a helpful AI assistant by Anthropic. You will follow the Model Context Protocol (MCP) for structured communication.\n\n\nYou are an AI assistant that follows the Model Context Protocol (MCP).\nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nAvailable tools:\n\nAvailable tools:\n\n1. \"shell\": Executes shell commands with configurable timeout\n   Parameters: {\n     \"command\": \"string\",           // The shell command to execute\n     \"timeout\": \"integer\",           // Optional: Command timeout in milliseconds\n   }\n\n2. \"diff\": Compare two files or text strings and show differences\n   Parameters: {\n     \"context_lines\": \"integer\",           // Optional: Number of context lines around changes\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace in comparison\n     \"new_content\": \"string\",           // Optional: New content string to compare\n     \"new_file\": \"string\",           // Optional: Path to new file (alternative to new_content)\n     \"old_content\": \"string\",           // Optional: Original content string to compare\n     \"old_file\": \"string\",           // Optional: Path to original file (alternative to old_content)\n     \"output_format\": \"string\",           // Optional: Output format (unified, inline, changes)\n   }\n\n3. \"code_analyzer\": Analyze code structure and relationships in various programming languages\n   Parameters: {\n     \"analysis_type\": \"string\",           // Optional: Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)\n     \"code\": \"string\",           // Optional: Code content to analyze (alternative to file)\n     \"detail_level\": \"string\",           // Optional: Level of detail to include in results (low, medium, high)\n     \"file\": \"string\",           // Optional: Path to the file to analyze\n     \"language\": \"string\",           // Optional: Programming language of the code (required when using code content)\n   }\n\n4. \"file_write\": Writes content to a file at the specified path\n   Parameters: {\n     \"append\": \"boolean\",           // Optional: Whether to append to the file or overwrite it\n     \"content\": \"string\",           // The content to write to the file\n     \"path\": \"string\",           // The path to write the file to\n   }\n\n5. \"test_runner\": Runs tests and analyzes test results\n   Parameters: {\n     \"framework\": \"string\",           // Optional: Specific test framework to use\n     \"path\": \"string\",           // Directory or file to run tests on\n     \"test_filter\": \"string\",           // Optional: Specific test or pattern to run\n     \"timeout_seconds\": \"number\",           // Optional: Maximum execution time in seconds\n   }\n\n6. \"grep\": Search for patterns in file contents using regular expressions\n   Parameters: {\n     \"case_sensitive\": \"boolean\",           // Optional: Whether to perform case-sensitive matching\n     \"context_lines\": \"integer\",           // Optional: Number of context lines before and after matches\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include\": \"string\",           // Optional: Glob pattern for files to include (e.g. '*.rs')\n     \"max_matches\": \"integer\",           // Optional: Maximum number of matches to return\n     \"path\": \"string\",           // Optional: Directory to search in (defaults to current directory)\n     \"pattern\": \"string\",           // Regular expression pattern to search for\n     \"recursive\": \"boolean\",           // Optional: Whether to search recursively in subdirectories\n   }\n\n7. \"find\": Find files matching name patterns and criteria\n   Parameters: {\n     \"base_dir\": \"string\",           // Optional: Base directory for search (defaults to current directory)\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include_dirs\": \"boolean\",           // Optional: Whether to include directories in results\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to search\n     \"modified_after\": \"string\",           // Optional: Only find files modified after this date (YYYY-MM-DD)\n     \"modified_before\": \"string\",           // Optional: Only find files modified before this date (YYYY-MM-DD)\n     \"order\": \"string\",           // Optional: Sort order (asc, desc)\n     \"pattern\": \"string\",           // Glob pattern to match files (e.g. '**/*.rs')\n     \"sort_by\": \"string\",           // Optional: Sort results by (name, size, modified_time)\n   }\n\n8. \"patch\": Apply patches to files using unified diff format\n   Parameters: {\n     \"create_backup\": \"boolean\",           // Optional: Whether to create a backup of the original file\n     \"dry_run\": \"boolean\",           // Optional: Whether to simulate the patch application without changing files\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace when applying the patch\n     \"patch_content\": \"string\",           // Patch content in unified diff format\n     \"target_file\": \"string\",           // Path to the file to patch\n   }\n\n9. \"directory_list\": Lists files and directories at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The directory path to list\n   }\n\n10. \"file_read\": Reads the contents of a file at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The path to the file to read\n   }\n\n11. \"project\": Analyzes project structure and dependencies\n   Parameters: {\n     \"analyze_dependencies\": \"boolean\",           // Optional: Whether to analyze project dependencies\n     \"include_hidden\": \"boolean\",           // Optional: Whether to include hidden files and directories\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to analyze\n     \"project_dir\": \"string\",           // Path to the project root directory\n   }\n\n\n\nAlways ensure your responses are syntactically valid JSON.\nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\nWhen working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code\nbefore making changes or executing commands.\n",
+  "temperature": 0.7,
+  "top_p": 0.9
+}
+2025-05-05T16:56:16.456273Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:693: Streaming Message[0] role=user, content=[
+  {
+    "type": "text",
+    "text": "lets test. please edit the README.md file in the current directory and append a markdown section for example code and put something random in the markdown for demo purposes"
+  }
+]
+2025-05-05T16:56:16.456276Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:693: Streaming Message[1] role=assistant, content=[
+  {
+    "type": "text",
+    "text": "I'll help you edit the README.md file by appending a markdown section with example code. First, let's check if the README.md file exists and what it currently contains."
+  }
+]
+2025-05-05T16:56:16.456277Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:693: Streaming Message[2] role=assistant, content=[
+  {
+    "type": "text",
+    "text": "Executing embedded tool: file_read"
+  }
+]
+2025-05-05T16:56:16.456280Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:693: Streaming Message[3] role=assistant, content=[
+  {
+    "type": "text",
+    "text": "I've received the following tool result:\n```json\n{\n  \"content\": \"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\",\n  \"size\": 422\n}\n```\n\nNow I need to provide a direct answer based on this result."
+  }
+]
+2025-05-05T16:56:16.456441Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:735: We're not using streaming for now, using regular invoke_model
+2025-05-05T16:56:16.456448Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:736: In AWS SDK 1.x, the streaming APIs are difficult to work with
+2025-05-05T16:56:27.464948Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:778: Received response from Bedrock
+2025-05-05T16:56:27.464992Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:784: Raw JSON streaming response from Bedrock: {"id":"msg_bdrk_01EAWCuKBw4gdu8saTK9UxU2","type":"message","role":"assistant","model":"claude-3-7-sonnet-20250219","content":[{"type":"text","text":"\n\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"file_write\",\n    \"parameters\": {\n      \"path\": \"README.md\",\n      \"content\": \"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\\n## Example Code\\n\\nHere's a random example of some Python code that demonstrates how to use our imaginary library:\\n\\n```python\\n# Import the fictional library\\nfrom awesome_lib import SuperTool\\n\\n# Initialize the tool with your API key\\ntool = SuperTool(api_key=\\\"your_secret_key_here\\\")\\n\\n# Process some data\\nresult = tool.process_data({\\n    \\\"input\\\": \\\"Hello, world!\\\",\\n    \\\"settings\\\": {\\n        \\\"language\\\": \\\"en\\\",\\n        \\\"complexity\\\": \\\"medium\\\",\\n        \\\"output_format\\\": \\\"json\\\"\\n    }\\n})\\n\\n# Display the results\\nprint(f\\\"Processing complete! Score: {result.score}\\\")\\nprint(f\\\"Generated output: {result.output}\\\")\\n```\\n\\nThis is just a demonstration of how code examples would appear in your documentation. Replace this with actual examples relevant to your project.\\n\",\n      \"append\": false\n    }\n  },\n  \"id\": \"1\"\n}"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":2279,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":431}}
+2025-05-05T16:56:27.465051Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:800: Successfully parsed Claude response: "msg_bdrk_01EAWCuKBw4gdu8saTK9UxU2"
+2025-05-05T16:56:27.465077Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:806: Parsed Claude streaming response structure: {
+  "id": "msg_bdrk_01EAWCuKBw4gdu8saTK9UxU2",
+  "content": [
+    {
+      "type": "text",
+      "text": "\n\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"file_write\",\n    \"parameters\": {\n      \"path\": \"README.md\",\n      \"content\": \"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\\n## Example Code\\n\\nHere's a random example of some Python code that demonstrates how to use our imaginary library:\\n\\n```python\\n# Import the fictional library\\nfrom awesome_lib import SuperTool\\n\\n# Initialize the tool with your API key\\ntool = SuperTool(api_key=\\\"your_secret_key_here\\\")\\n\\n# Process some data\\nresult = tool.process_data({\\n    \\\"input\\\": \\\"Hello, world!\\\",\\n    \\\"settings\\\": {\\n        \\\"language\\\": \\\"en\\\",\\n        \\\"complexity\\\": \\\"medium\\\",\\n        \\\"output_format\\\": \\\"json\\\"\\n    }\\n})\\n\\n# Display the results\\nprint(f\\\"Processing complete! Score: {result.score}\\\")\\nprint(f\\\"Generated output: {result.output}\\\")\\n```\\n\\nThis is just a demonstration of how code examples would appear in your documentation. Replace this with actual examples relevant to your project.\\n\",\n      \"append\": false\n    }\n  },\n  \"id\": \"1\"\n}"
+    }
+  ],
+  "model": "claude-3-7-sonnet-20250219",
+  "role": "assistant",
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 2279,
+    "output_tokens": 431
+  },
+  "type_": null
+}
+2025-05-05T16:56:27.465128Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:837: Content appears to be valid JSON, checking for tool calls
+2025-05-05T16:56:27.465193Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:843: Found tool call in response
+2025-05-05T16:56:27.465255Z DEBUG mcpterm_cli::formatter: crates/mcpterm-cli/src/formatter.rs:718: Detected tool call JSON-RPC, skipping format: 
+
+{
+  "jsonrpc": "2.0",
+  "method": "mcp.tool_call",
+  "params": {
+    "name": "file_write",
+    "parameters": {
+      "path": "README.md",
+      "content": "# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n\n## Example Code\n\nHere's a random example of some Python code that demonstrates how to use our imaginary library:\n\n```python\n# Import the fictional library\nfrom awesome_lib import SuperTool\n\n# Initialize the tool with your API key\ntool = SuperTool(api_key=\"your_secret_key_here\")\n\n# Process some data\nresult = tool.process_data({\n    \"input\": \"Hello, world!\",\n    \"settings\": {\n        \"language\": \"en\",\n        \"complexity\": \"medium\",\n        \"output_format\": \"json\"\n    }\n})\n\n# Display the results\nprint(f\"Processing complete! Score: {result.score}\")\nprint(f\"Generated output: {result.output}\")\n```\n\nThis is just a demonstration of how code examples would appear in your documentation. Replace this with actual examples relevant to your project.\n",
+      "append": false
+    }
+  },
+  "id": "1"
+}
+2025-05-05T16:56:27.465288Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:737: Follow-up response complete
+2025-05-05T16:56:27.465329Z DEBUG mcp_core::protocol::validation: crates/mcp-core/src/protocol/validation.rs:50: Validating LLM response format
+2025-05-05T16:56:27.465369Z DEBUG mcp_core::protocol::validation: crates/mcp-core/src/protocol/validation.rs:59: Response is valid JSON-RPC
+2025-05-05T16:56:27.465382Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:662: FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying...
+2025-05-05T16:56:27.465391Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:760: FOLLOW-UP RESPONSE WAS EMPTY OR CONTAINS ANOTHER TOOL CALL! Retrying...
+2025-05-05T16:56:27.465397Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:70: Adding assistant message to conversation
+2025-05-05T16:56:27.465400Z TRACE mcp_core::context: crates/mcp-core/src/context/mod.rs:71: Assistant message content: I've executed the requested tool and received the following result: {"jsonrpc": "2.0", "result": {"content":"# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n","size":422}, "id": "tool_result"}. Now I need to provide a direct human-readable answer based on this result. The tool has already been executed successfully. I will not make another tool call. Instead, I'll synthesize a concise answer for the user based on the tool result above.
+2025-05-05T16:56:27.465410Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:83: Conversation now has 5 messages
+2025-05-05T16:56:27.465413Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:770: Getting follow-up response with explicit instruction...
+2025-05-05T16:56:28.468228Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:294: Using system prompt with 7867 characters
+2025-05-05T16:56:28.468264Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:298: System prompt content: You are an AI assistant that follows the Model Context Protocol (MCP). 
+You MUST communicate using valid JSON in the JSON-RPC 2.0 format.
+
+Here are the rules:
+
+1. For regular responses, use:
+{
+  "jsonrpc": "2.0",
+  "result": "Your message here...",
+  "id": "<request_id>"
+}
+
+2. For tool calls, use:
+{
+  "jsonrpc": "2.0",
+  "method": "mcp.tool_call",
+  "params": {
+    "name": "<tool_name>",
+    "parameters": {
+      // Tool-specific parameters
+    }
+  },
+  "id": "<request_id>"
+}
+
+3. For errors, use:
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32000,
+    "message": "Error description"
+  },
+  "id": "<request_id>"
+}
+
+Examples of available tools:
+1. "shell": Execute a shell command
+   Parameters: { "command": "string" }
+
+2. "file_read": Read a file
+   Parameters: { "path": "string" }
+
+3. "file_write": Write to a file
+   Parameters: { "path": "string", "content": "string" }
+
+4. "search": Search for files or content
+   Parameters: { "query": "string", "path": "string" }
+
+Always ensure your responses are syntactically valid JSON. 
+Never include multiple JSON objects in a single response.
+If you require more information or the result of a tool call, make a tool call request and wait for the result.
+
+
+You are Claude, a helpful AI assistant by Anthropic. You will follow the Model Context Protocol (MCP) for structured communication.
+
+
+You are an AI assistant that follows the Model Context Protocol (MCP).
+You MUST communicate using valid JSON in the JSON-RPC 2.0 format.
+
+Here are the rules:
+
+1. For regular responses, use:
+{
+  "jsonrpc": "2.0",
+  "result": "Your message here...",
+  "id": "<request_id>"
+}
+
+2. For tool calls, use:
+{
+  "jsonrpc": "2.0",
+  "method": "mcp.tool_call",
+  "params": {
+    "name": "<tool_name>",
+    "parameters": {
+      // Tool-specific parameters
+    }
+  },
+  "id": "<request_id>"
+}
+
+3. For errors, use:
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32000,
+    "message": "Error description"
+  },
+  "id": "<request_id>"
+}
+
+Available tools:
+
+Available tools:
+
+1. "shell": Executes shell commands with configurable timeout
+   Parameters: {
+     "command": "string",           // The shell command to execute
+     "timeout": "integer",           // Optional: Command timeout in milliseconds
+   }
+
+2. "diff": Compare two files or text strings and show differences
+   Parameters: {
+     "context_lines": "integer",           // Optional: Number of context lines around changes
+     "ignore_whitespace": "boolean",           // Optional: Whether to ignore whitespace in comparison
+     "new_content": "string",           // Optional: New content string to compare
+     "new_file": "string",           // Optional: Path to new file (alternative to new_content)
+     "old_content": "string",           // Optional: Original content string to compare
+     "old_file": "string",           // Optional: Path to original file (alternative to old_content)
+     "output_format": "string",           // Optional: Output format (unified, inline, changes)
+   }
+
+3. "code_analyzer": Analyze code structure and relationships in various programming languages
+   Parameters: {
+     "analysis_type": "string",           // Optional: Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)
+     "code": "string",           // Optional: Code content to analyze (alternative to file)
+     "detail_level": "string",           // Optional: Level of detail to include in results (low, medium, high)
+     "file": "string",           // Optional: Path to the file to analyze
+     "language": "string",           // Optional: Programming language of the code (required when using code content)
+   }
+
+4. "file_write": Writes content to a file at the specified path
+   Parameters: {
+     "append": "boolean",           // Optional: Whether to append to the file or overwrite it
+     "content": "string",           // The content to write to the file
+     "path": "string",           // The path to write the file to
+   }
+
+5. "test_runner": Runs tests and analyzes test results
+   Parameters: {
+     "framework": "string",           // Optional: Specific test framework to use
+     "path": "string",           // Directory or file to run tests on
+     "test_filter": "string",           // Optional: Specific test or pattern to run
+     "timeout_seconds": "number",           // Optional: Maximum execution time in seconds
+   }
+
+6. "grep": Search for patterns in file contents using regular expressions
+   Parameters: {
+     "case_sensitive": "boolean",           // Optional: Whether to perform case-sensitive matching
+     "context_lines": "integer",           // Optional: Number of context lines before and after matches
+     "exclude": "string",           // Optional: Glob pattern for files to exclude
+     "include": "string",           // Optional: Glob pattern for files to include (e.g. '*.rs')
+     "max_matches": "integer",           // Optional: Maximum number of matches to return
+     "path": "string",           // Optional: Directory to search in (defaults to current directory)
+     "pattern": "string",           // Regular expression pattern to search for
+     "recursive": "boolean",           // Optional: Whether to search recursively in subdirectories
+   }
+
+7. "find": Find files matching name patterns and criteria
+   Parameters: {
+     "base_dir": "string",           // Optional: Base directory for search (defaults to current directory)
+     "exclude": "string",           // Optional: Glob pattern for files to exclude
+     "include_dirs": "boolean",           // Optional: Whether to include directories in results
+     "max_depth": "integer",           // Optional: Maximum directory depth to search
+     "modified_after": "string",           // Optional: Only find files modified after this date (YYYY-MM-DD)
+     "modified_before": "string",           // Optional: Only find files modified before this date (YYYY-MM-DD)
+     "order": "string",           // Optional: Sort order (asc, desc)
+     "pattern": "string",           // Glob pattern to match files (e.g. '**/*.rs')
+     "sort_by": "string",           // Optional: Sort results by (name, size, modified_time)
+   }
+
+8. "patch": Apply patches to files using unified diff format
+   Parameters: {
+     "create_backup": "boolean",           // Optional: Whether to create a backup of the original file
+     "dry_run": "boolean",           // Optional: Whether to simulate the patch application without changing files
+     "ignore_whitespace": "boolean",           // Optional: Whether to ignore whitespace when applying the patch
+     "patch_content": "string",           // Patch content in unified diff format
+     "target_file": "string",           // Path to the file to patch
+   }
+
+9. "directory_list": Lists files and directories at the specified path
+   Parameters: {
+     "path": "string",           // The directory path to list
+   }
+
+10. "file_read": Reads the contents of a file at the specified path
+   Parameters: {
+     "path": "string",           // The path to the file to read
+   }
+
+11. "project": Analyzes project structure and dependencies
+   Parameters: {
+     "analyze_dependencies": "boolean",           // Optional: Whether to analyze project dependencies
+     "include_hidden": "boolean",           // Optional: Whether to include hidden files and directories
+     "max_depth": "integer",           // Optional: Maximum directory depth to analyze
+     "project_dir": "string",           // Path to the project root directory
+   }
+
+
+
+Always ensure your responses are syntactically valid JSON.
+Never include multiple JSON objects in a single response.
+If you require more information or the result of a tool call, make a tool call request and wait for the result.
+
+When working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code
+before making changes or executing commands.
+
+2025-05-05T16:56:28.468274Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:309: Converting tool message to specialized assistant message: {"jsonrpc": "2.0", "result": {"content":"# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n","size":422}, "id": "tool_result"}
+2025-05-05T16:56:28.468299Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:319: Tool result JSON: {
+  "id": "tool_result",
+  "jsonrpc": "2.0",
+  "result": {
+    "content": "# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n",
+    "size": 422
+  }
+}
+2025-05-05T16:56:28.468309Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:332: Created specialized tool result message: I've received the following tool result:
+```json
+{
+  "content": "# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n",
+  "size": 422
+}
+```
+
+Now I need to provide a direct answer based on this result.
+2025-05-05T16:56:28.468390Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:676: Sending streaming request to Bedrock: us.anthropic.claude-3-7-sonnet-20250219-v1:0
+2025-05-05T16:56:28.468408Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:680: Request payload: {"anthropic_version":"bedrock-2023-05-31","max_tokens":4096,"messages":[{"role":"user","content":[{"type":"text","text":"lets test. please edit the README.md file in the current directory and append a markdown section for example code and put something random in the markdown for demo purposes"}]},{"role":"assistant","content":[{"type":"text","text":"I'll help you edit the README.md file by appending a markdown section with example code. First, let's check if the README.md file exists and what it currently contains."}]},{"role":"assistant","content":[{"type":"text","text":"Executing embedded tool: file_read"}]},{"role":"assistant","content":[{"type":"text","text":"I've received the following tool result:\n```json\n{\n  \"content\": \"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\",\n  \"size\": 422\n}\n```\n\nNow I need to provide a direct answer based on this result."}]},{"role":"assistant","content":[{"type":"text","text":"I've executed the requested tool and received the following result: {\"jsonrpc\": \"2.0\", \"result\": {\"content\":\"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\",\"size\":422}, \"id\": \"tool_result\"}. Now I need to provide a direct human-readable answer based on this result. The tool has already been executed successfully. I will not make another tool call. Instead, I'll synthesize a concise answer for the user based on the tool result above."}]}],"system":"You are an AI assistant that follows the Model Context Protocol (MCP). \nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nExamples of available tools:\n1. \"shell\": Execute a shell command\n   Parameters: { \"command\": \"string\" }\n\n2. \"file_read\": Read a file\n   Parameters: { \"path\": \"string\" }\n\n3. \"file_write\": Write to a file\n   Parameters: { \"path\": \"string\", \"content\": \"string\" }\n\n4. \"search\": Search for files or content\n   Parameters: { \"query\": \"string\", \"path\": \"string\" }\n\nAlways ensure your responses are syntactically valid JSON. \nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\n\nYou are Claude, a helpful AI assistant by Anthropic. You will follow the Model Context Protocol (MCP) for structured communication.\n\n\nYou are an AI assistant that follows the Model Context Protocol (MCP).\nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nAvailable tools:\n\nAvailable tools:\n\n1. \"shell\": Executes shell commands with configurable timeout\n   Parameters: {\n     \"command\": \"string\",           // The shell command to execute\n     \"timeout\": \"integer\",           // Optional: Command timeout in milliseconds\n   }\n\n2. \"diff\": Compare two files or text strings and show differences\n   Parameters: {\n     \"context_lines\": \"integer\",           // Optional: Number of context lines around changes\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace in comparison\n     \"new_content\": \"string\",           // Optional: New content string to compare\n     \"new_file\": \"string\",           // Optional: Path to new file (alternative to new_content)\n     \"old_content\": \"string\",           // Optional: Original content string to compare\n     \"old_file\": \"string\",           // Optional: Path to original file (alternative to old_content)\n     \"output_format\": \"string\",           // Optional: Output format (unified, inline, changes)\n   }\n\n3. \"code_analyzer\": Analyze code structure and relationships in various programming languages\n   Parameters: {\n     \"analysis_type\": \"string\",           // Optional: Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)\n     \"code\": \"string\",           // Optional: Code content to analyze (alternative to file)\n     \"detail_level\": \"string\",           // Optional: Level of detail to include in results (low, medium, high)\n     \"file\": \"string\",           // Optional: Path to the file to analyze\n     \"language\": \"string\",           // Optional: Programming language of the code (required when using code content)\n   }\n\n4. \"file_write\": Writes content to a file at the specified path\n   Parameters: {\n     \"append\": \"boolean\",           // Optional: Whether to append to the file or overwrite it\n     \"content\": \"string\",           // The content to write to the file\n     \"path\": \"string\",           // The path to write the file to\n   }\n\n5. \"test_runner\": Runs tests and analyzes test results\n   Parameters: {\n     \"framework\": \"string\",           // Optional: Specific test framework to use\n     \"path\": \"string\",           // Directory or file to run tests on\n     \"test_filter\": \"string\",           // Optional: Specific test or pattern to run\n     \"timeout_seconds\": \"number\",           // Optional: Maximum execution time in seconds\n   }\n\n6. \"grep\": Search for patterns in file contents using regular expressions\n   Parameters: {\n     \"case_sensitive\": \"boolean\",           // Optional: Whether to perform case-sensitive matching\n     \"context_lines\": \"integer\",           // Optional: Number of context lines before and after matches\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include\": \"string\",           // Optional: Glob pattern for files to include (e.g. '*.rs')\n     \"max_matches\": \"integer\",           // Optional: Maximum number of matches to return\n     \"path\": \"string\",           // Optional: Directory to search in (defaults to current directory)\n     \"pattern\": \"string\",           // Regular expression pattern to search for\n     \"recursive\": \"boolean\",           // Optional: Whether to search recursively in subdirectories\n   }\n\n7. \"find\": Find files matching name patterns and criteria\n   Parameters: {\n     \"base_dir\": \"string\",           // Optional: Base directory for search (defaults to current directory)\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include_dirs\": \"boolean\",           // Optional: Whether to include directories in results\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to search\n     \"modified_after\": \"string\",           // Optional: Only find files modified after this date (YYYY-MM-DD)\n     \"modified_before\": \"string\",           // Optional: Only find files modified before this date (YYYY-MM-DD)\n     \"order\": \"string\",           // Optional: Sort order (asc, desc)\n     \"pattern\": \"string\",           // Glob pattern to match files (e.g. '**/*.rs')\n     \"sort_by\": \"string\",           // Optional: Sort results by (name, size, modified_time)\n   }\n\n8. \"patch\": Apply patches to files using unified diff format\n   Parameters: {\n     \"create_backup\": \"boolean\",           // Optional: Whether to create a backup of the original file\n     \"dry_run\": \"boolean\",           // Optional: Whether to simulate the patch application without changing files\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace when applying the patch\n     \"patch_content\": \"string\",           // Patch content in unified diff format\n     \"target_file\": \"string\",           // Path to the file to patch\n   }\n\n9. \"directory_list\": Lists files and directories at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The directory path to list\n   }\n\n10. \"file_read\": Reads the contents of a file at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The path to the file to read\n   }\n\n11. \"project\": Analyzes project structure and dependencies\n   Parameters: {\n     \"analyze_dependencies\": \"boolean\",           // Optional: Whether to analyze project dependencies\n     \"include_hidden\": \"boolean\",           // Optional: Whether to include hidden files and directories\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to analyze\n     \"project_dir\": \"string\",           // Path to the project root directory\n   }\n\n\n\nAlways ensure your responses are syntactically valid JSON.\nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\nWhen working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code\nbefore making changes or executing commands.\n","temperature":0.7,"top_p":0.9}
+2025-05-05T16:56:28.468498Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:686: Raw streaming JSON request payload to Bedrock: {
+  "anthropic_version": "bedrock-2023-05-31",
+  "max_tokens": 4096,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "lets test. please edit the README.md file in the current directory and append a markdown section for example code and put something random in the markdown for demo purposes"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "I'll help you edit the README.md file by appending a markdown section with example code. First, let's check if the README.md file exists and what it currently contains."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Executing embedded tool: file_read"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "I've received the following tool result:\n```json\n{\n  \"content\": \"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\",\n  \"size\": 422\n}\n```\n\nNow I need to provide a direct answer based on this result."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "I've executed the requested tool and received the following result: {\"jsonrpc\": \"2.0\", \"result\": {\"content\":\"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\",\"size\":422}, \"id\": \"tool_result\"}. Now I need to provide a direct human-readable answer based on this result. The tool has already been executed successfully. I will not make another tool call. Instead, I'll synthesize a concise answer for the user based on the tool result above."
+        }
+      ]
+    }
+  ],
+  "system": "You are an AI assistant that follows the Model Context Protocol (MCP). \nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nExamples of available tools:\n1. \"shell\": Execute a shell command\n   Parameters: { \"command\": \"string\" }\n\n2. \"file_read\": Read a file\n   Parameters: { \"path\": \"string\" }\n\n3. \"file_write\": Write to a file\n   Parameters: { \"path\": \"string\", \"content\": \"string\" }\n\n4. \"search\": Search for files or content\n   Parameters: { \"query\": \"string\", \"path\": \"string\" }\n\nAlways ensure your responses are syntactically valid JSON. \nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\n\nYou are Claude, a helpful AI assistant by Anthropic. You will follow the Model Context Protocol (MCP) for structured communication.\n\n\nYou are an AI assistant that follows the Model Context Protocol (MCP).\nYou MUST communicate using valid JSON in the JSON-RPC 2.0 format.\n\nHere are the rules:\n\n1. For regular responses, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"Your message here...\",\n  \"id\": \"<request_id>\"\n}\n\n2. For tool calls, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"<tool_name>\",\n    \"parameters\": {\n      // Tool-specific parameters\n    }\n  },\n  \"id\": \"<request_id>\"\n}\n\n3. For errors, use:\n{\n  \"jsonrpc\": \"2.0\",\n  \"error\": {\n    \"code\": -32000,\n    \"message\": \"Error description\"\n  },\n  \"id\": \"<request_id>\"\n}\n\nAvailable tools:\n\nAvailable tools:\n\n1. \"shell\": Executes shell commands with configurable timeout\n   Parameters: {\n     \"command\": \"string\",           // The shell command to execute\n     \"timeout\": \"integer\",           // Optional: Command timeout in milliseconds\n   }\n\n2. \"diff\": Compare two files or text strings and show differences\n   Parameters: {\n     \"context_lines\": \"integer\",           // Optional: Number of context lines around changes\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace in comparison\n     \"new_content\": \"string\",           // Optional: New content string to compare\n     \"new_file\": \"string\",           // Optional: Path to new file (alternative to new_content)\n     \"old_content\": \"string\",           // Optional: Original content string to compare\n     \"old_file\": \"string\",           // Optional: Path to original file (alternative to old_content)\n     \"output_format\": \"string\",           // Optional: Output format (unified, inline, changes)\n   }\n\n3. \"code_analyzer\": Analyze code structure and relationships in various programming languages\n   Parameters: {\n     \"analysis_type\": \"string\",           // Optional: Type of analysis to perform (definitions, imports, usages, datastructures, comprehensive)\n     \"code\": \"string\",           // Optional: Code content to analyze (alternative to file)\n     \"detail_level\": \"string\",           // Optional: Level of detail to include in results (low, medium, high)\n     \"file\": \"string\",           // Optional: Path to the file to analyze\n     \"language\": \"string\",           // Optional: Programming language of the code (required when using code content)\n   }\n\n4. \"file_write\": Writes content to a file at the specified path\n   Parameters: {\n     \"append\": \"boolean\",           // Optional: Whether to append to the file or overwrite it\n     \"content\": \"string\",           // The content to write to the file\n     \"path\": \"string\",           // The path to write the file to\n   }\n\n5. \"test_runner\": Runs tests and analyzes test results\n   Parameters: {\n     \"framework\": \"string\",           // Optional: Specific test framework to use\n     \"path\": \"string\",           // Directory or file to run tests on\n     \"test_filter\": \"string\",           // Optional: Specific test or pattern to run\n     \"timeout_seconds\": \"number\",           // Optional: Maximum execution time in seconds\n   }\n\n6. \"grep\": Search for patterns in file contents using regular expressions\n   Parameters: {\n     \"case_sensitive\": \"boolean\",           // Optional: Whether to perform case-sensitive matching\n     \"context_lines\": \"integer\",           // Optional: Number of context lines before and after matches\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include\": \"string\",           // Optional: Glob pattern for files to include (e.g. '*.rs')\n     \"max_matches\": \"integer\",           // Optional: Maximum number of matches to return\n     \"path\": \"string\",           // Optional: Directory to search in (defaults to current directory)\n     \"pattern\": \"string\",           // Regular expression pattern to search for\n     \"recursive\": \"boolean\",           // Optional: Whether to search recursively in subdirectories\n   }\n\n7. \"find\": Find files matching name patterns and criteria\n   Parameters: {\n     \"base_dir\": \"string\",           // Optional: Base directory for search (defaults to current directory)\n     \"exclude\": \"string\",           // Optional: Glob pattern for files to exclude\n     \"include_dirs\": \"boolean\",           // Optional: Whether to include directories in results\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to search\n     \"modified_after\": \"string\",           // Optional: Only find files modified after this date (YYYY-MM-DD)\n     \"modified_before\": \"string\",           // Optional: Only find files modified before this date (YYYY-MM-DD)\n     \"order\": \"string\",           // Optional: Sort order (asc, desc)\n     \"pattern\": \"string\",           // Glob pattern to match files (e.g. '**/*.rs')\n     \"sort_by\": \"string\",           // Optional: Sort results by (name, size, modified_time)\n   }\n\n8. \"patch\": Apply patches to files using unified diff format\n   Parameters: {\n     \"create_backup\": \"boolean\",           // Optional: Whether to create a backup of the original file\n     \"dry_run\": \"boolean\",           // Optional: Whether to simulate the patch application without changing files\n     \"ignore_whitespace\": \"boolean\",           // Optional: Whether to ignore whitespace when applying the patch\n     \"patch_content\": \"string\",           // Patch content in unified diff format\n     \"target_file\": \"string\",           // Path to the file to patch\n   }\n\n9. \"directory_list\": Lists files and directories at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The directory path to list\n   }\n\n10. \"file_read\": Reads the contents of a file at the specified path\n   Parameters: {\n     \"path\": \"string\",           // The path to the file to read\n   }\n\n11. \"project\": Analyzes project structure and dependencies\n   Parameters: {\n     \"analyze_dependencies\": \"boolean\",           // Optional: Whether to analyze project dependencies\n     \"include_hidden\": \"boolean\",           // Optional: Whether to include hidden files and directories\n     \"max_depth\": \"integer\",           // Optional: Maximum directory depth to analyze\n     \"project_dir\": \"string\",           // Path to the project root directory\n   }\n\n\n\nAlways ensure your responses are syntactically valid JSON.\nNever include multiple JSON objects in a single response.\nIf you require more information or the result of a tool call, make a tool call request and wait for the result.\n\nWhen working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code\nbefore making changes or executing commands.\n",
+  "temperature": 0.7,
+  "top_p": 0.9
+}
+2025-05-05T16:56:28.468527Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:693: Streaming Message[0] role=user, content=[
+  {
+    "type": "text",
+    "text": "lets test. please edit the README.md file in the current directory and append a markdown section for example code and put something random in the markdown for demo purposes"
+  }
+]
+2025-05-05T16:56:28.468531Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:693: Streaming Message[1] role=assistant, content=[
+  {
+    "type": "text",
+    "text": "I'll help you edit the README.md file by appending a markdown section with example code. First, let's check if the README.md file exists and what it currently contains."
+  }
+]
+2025-05-05T16:56:28.468533Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:693: Streaming Message[2] role=assistant, content=[
+  {
+    "type": "text",
+    "text": "Executing embedded tool: file_read"
+  }
+]
+2025-05-05T16:56:28.468539Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:693: Streaming Message[3] role=assistant, content=[
+  {
+    "type": "text",
+    "text": "I've received the following tool result:\n```json\n{\n  \"content\": \"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\",\n  \"size\": 422\n}\n```\n\nNow I need to provide a direct answer based on this result."
+  }
+]
+2025-05-05T16:56:28.468546Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:693: Streaming Message[4] role=assistant, content=[
+  {
+    "type": "text",
+    "text": "I've executed the requested tool and received the following result: {\"jsonrpc\": \"2.0\", \"result\": {\"content\":\"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\",\"size\":422}, \"id\": \"tool_result\"}. Now I need to provide a direct human-readable answer based on this result. The tool has already been executed successfully. I will not make another tool call. Instead, I'll synthesize a concise answer for the user based on the tool result above."
+  }
+]
+2025-05-05T16:56:28.468646Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:735: We're not using streaming for now, using regular invoke_model
+2025-05-05T16:56:28.468655Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:736: In AWS SDK 1.x, the streaming APIs are difficult to work with
+2025-05-05T16:56:40.862979Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:778: Received response from Bedrock
+2025-05-05T16:56:40.863027Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:784: Raw JSON streaming response from Bedrock: {"id":"msg_bdrk_012rqm6ZH8PJss1RQgPsgpr1","type":"message","role":"assistant","model":"claude-3-7-sonnet-20250219","content":[{"type":"text","text":"\n\nNow I'll append a markdown section with example code to this README.md file:\n\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"file_write\",\n    \"parameters\": {\n      \"path\": \"README.md\",\n      \"content\": \"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\\n## Example Code\\n\\nHere's a random code example for demonstration purposes:\\n\\n```python\\n# A simple Python function that generates Fibonacci numbers\\ndef fibonacci(n):\\n    \\\"\\\"\\\"Generate the first n Fibonacci numbers\\\"\\\"\\\"\\n    fib_sequence = [0, 1]\\n    \\n    if n <= 0:\\n        return []\\n    elif n == 1:\\n        return [0]\\n    elif n == 2:\\n        return fib_sequence\\n    \\n    for i in range(2, n):\\n        fib_sequence.append(fib_sequence[i-1] + fib_sequence[i-2])\\n    \\n    return fib_sequence\\n\\n# Example usage\\nif __name__ == \\\"__main__\\\":\\n    n = 10\\n    result = fibonacci(n)\\n    print(f\\\"First {n} Fibonacci numbers: {result}\\\")\\n    # Output: First 10 Fibonacci numbers: [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]\\n```\\n\\nFeel free to replace this with actual examples relevant to your project!\",\n      \"append\": false\n    }\n  },\n  \"id\": \"file_write_request\"\n}"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":2476,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":506}}
+2025-05-05T16:56:40.863077Z DEBUG mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:800: Successfully parsed Claude response: "msg_bdrk_012rqm6ZH8PJss1RQgPsgpr1"
+2025-05-05T16:56:40.863106Z TRACE mcp_llm::bedrock: crates/mcp-llm/src/bedrock/mod.rs:806: Parsed Claude streaming response structure: {
+  "id": "msg_bdrk_012rqm6ZH8PJss1RQgPsgpr1",
+  "content": [
+    {
+      "type": "text",
+      "text": "\n\nNow I'll append a markdown section with example code to this README.md file:\n\n{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"mcp.tool_call\",\n  \"params\": {\n    \"name\": \"file_write\",\n    \"parameters\": {\n      \"path\": \"README.md\",\n      \"content\": \"# Project README\\n\\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\\n\\n## Overview\\n\\nThis file serves as documentation for your project. You can edit this file to include information about:\\n\\n- Project description\\n- Installation instructions\\n- Usage examples\\n- Contributing guidelines\\n- License information\\n\\n## Getting Started\\n\\nReplace this content with your actual project documentation.\\n\\n## Example Code\\n\\nHere's a random code example for demonstration purposes:\\n\\n```python\\n# A simple Python function that generates Fibonacci numbers\\ndef fibonacci(n):\\n    \\\"\\\"\\\"Generate the first n Fibonacci numbers\\\"\\\"\\\"\\n    fib_sequence = [0, 1]\\n    \\n    if n <= 0:\\n        return []\\n    elif n == 1:\\n        return [0]\\n    elif n == 2:\\n        return fib_sequence\\n    \\n    for i in range(2, n):\\n        fib_sequence.append(fib_sequence[i-1] + fib_sequence[i-2])\\n    \\n    return fib_sequence\\n\\n# Example usage\\nif __name__ == \\\"__main__\\\":\\n    n = 10\\n    result = fibonacci(n)\\n    print(f\\\"First {n} Fibonacci numbers: {result}\\\")\\n    # Output: First 10 Fibonacci numbers: [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]\\n```\\n\\nFeel free to replace this with actual examples relevant to your project!\",\n      \"append\": false\n    }\n  },\n  \"id\": \"file_write_request\"\n}"
+    }
+  ],
+  "model": "claude-3-7-sonnet-20250219",
+  "role": "assistant",
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 2476,
+    "output_tokens": 506
+  },
+  "type_": null
+}
+2025-05-05T16:56:40.863161Z DEBUG mcpterm_cli::formatter: crates/mcpterm-cli/src/formatter.rs:718: Detected tool call JSON-RPC, skipping format: 
+
+Now I'll append a markdown section with example code to this README.md file:
+
+{
+  "jsonrpc": "2.0",
+  "method": "mcp.tool_call",
+  "params": {
+    "name": "file_write",
+    "parameters": {
+      "path": "README.md",
+      "content": "# Project README\n\nThis is a sample README file created by Claude using the Model Context Protocol (MCP).\n\n## Overview\n\nThis file serves as documentation for your project. You can edit this file to include information about:\n\n- Project description\n- Installation instructions\n- Usage examples\n- Contributing guidelines\n- License information\n\n## Getting Started\n\nReplace this content with your actual project documentation.\n\n## Example Code\n\nHere's a random code example for demonstration purposes:\n\n```python\n# A simple Python function that generates Fibonacci numbers\ndef fibonacci(n):\n    \"\"\"Generate the first n Fibonacci numbers\"\"\"\n    fib_sequence = [0, 1]\n    \n    if n <= 0:\n        return []\n    elif n == 1:\n        return [0]\n    elif n == 2:\n        return fib_sequence\n    \n    for i in range(2, n):\n        fib_sequence.append(fib_sequence[i-1] + fib_sequence[i-2])\n    \n    return fib_sequence\n\n# Example usage\nif __name__ == \"__main__\":\n    n = 10\n    result = fibonacci(n)\n    print(f\"First {n} Fibonacci numbers: {result}\")\n    # Output: First 10 Fibonacci numbers: [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]\n```\n\nFeel free to replace this with actual examples relevant to your project!",
+      "append": false
+    }
+  },
+  "id": "file_write_request"
+}
+2025-05-05T16:56:40.863202Z DEBUG mcpterm_cli: crates/mcpterm-cli/src/lib.rs:789: RETRY STILL PROBLEMATIC! Using fallback response.
+2025-05-05T16:56:40.863291Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:70: Adding assistant message to conversation
+2025-05-05T16:56:40.863298Z TRACE mcp_core::context: crates/mcp-core/src/context/mod.rs:71: Assistant message content: [36m┌─────────────────────────────────┐[0m
+[36m│[0m Tool Result: [1m[31mFAILURE[0m               │[36m
+[36m└─────────────────────────────────┘[0m
+
+[1m[34mResult:[0m
+[36m{[0m[36m}[0m
+
+2025-05-05T16:56:40.863305Z DEBUG mcp_core::context: crates/mcp-core/src/context/mod.rs:83: Conversation now has 6 messages
+2025-05-05T16:56:40.863339Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:255: Waiting for any follow-up responses...
+2025-05-05T16:56:43.864812Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:260: Context size after processing: 6 messages
+2025-05-05T16:56:43.864849Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:264: Last 3 message roles: Tool, Assistant, Assistant
+2025-05-05T16:56:43.864854Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:265: Processing complete
+2025-05-05T16:56:43.864858Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:312: Generating metrics summary for this CLI execution
+2025-05-05T16:56:43.864975Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:148: ===== Metrics Report: 2025-05-05 16:56:43 UTC =====    
+2025-05-05T16:56:43.865067Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:149: App Version: 0.1.0    
+2025-05-05T16:56:43.865071Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:150: Interval: 36 seconds    
+2025-05-05T16:56:43.865073Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:153: --- Counters ---    
+2025-05-05T16:56:43.865076Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: llm.responses.mixed: 1    
+2025-05-05T16:56:43.865079Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: tool.executions.file_read: 1    
+2025-05-05T16:56:43.865081Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: app.initialization: 1    
+2025-05-05T16:56:43.865083Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: tool.executions.success: 1    
+2025-05-05T16:56:43.865086Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: llm.stream_chunks: 1    
+2025-05-05T16:56:43.865088Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: llm.streaming_follow_up_responses.valid: 1    
+2025-05-05T16:56:43.865090Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: llm.responses.mixed_valid: 1    
+2025-05-05T16:56:43.865092Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: conversation.messages.assistant: 4    
+2025-05-05T16:56:43.865094Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: llm.requests.bedrock: 1    
+2025-05-05T16:56:43.865097Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: llm.requests.total: 1    
+2025-05-05T16:56:43.865099Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: conversation.messages.tool: 1    
+2025-05-05T16:56:43.865101Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: llm.tool_calls: 1    
+2025-05-05T16:56:43.865103Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: conversation.messages.total: 6    
+2025-05-05T16:56:43.865105Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: tool.executions.total: 1    
+2025-05-05T16:56:43.865108Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:155: conversation.messages.user: 1    
+2025-05-05T16:56:43.865110Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:159: --- Gauges ---    
+2025-05-05T16:56:43.865112Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:161: tool.execution_time.file_read: 1    
+2025-05-05T16:56:43.865114Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:161: llm.streaming_response_time: 5586    
+2025-05-05T16:56:43.865116Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:161: app.mcp_enabled: 1    
+2025-05-05T16:56:43.865118Z DEBUG mcp_metrics: crates/mcp-metrics/src/lib.rs:164: ===== End Metrics Report =====    
+2025-05-05T16:56:43.865121Z DEBUG mcpterm_cli::cli_main: crates/mcpterm-cli/src/cli_main.rs:319: Exiting mcpterm-cli
