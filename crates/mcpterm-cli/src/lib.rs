@@ -422,10 +422,14 @@ impl CliApp {
             } => {
                 count!("llm.responses.mixed", 1);
                 count!("llm.responses.mixed_valid", 1);
+                count!("llm.responses.total_mixed_valid", 1);
+                gauge!("llm.responses.mixed_valid_ratio", 100);
             }
             mcp_core::ValidationResult::Mixed { json_rpc: None, .. } => {
                 count!("llm.responses.mixed", 1);
                 count!("llm.responses.mixed_invalid", 1);
+                count!("llm.responses.total_mixed_invalid", 1);
+                gauge!("llm.responses.mixed_invalid_ratio", 100);
             }
             mcp_core::ValidationResult::NotJsonRpc(_) => {
                 count!("llm.responses.not_jsonrpc", 1);
@@ -443,8 +447,9 @@ impl CliApp {
                 json_rpc: Some(json_rpc),
             } => {
                 // We have both text and valid JSON-RPC
-                debug!("Response contains both text and valid JSON-RPC");
+                debug!("Response contains both text and valid JSON-RPC - text length: {}, json part present", text.len());
                 count!("llm.responses.mixed_valid", 1);
+                gauge!("llm.follow_up_responses.mixed_text_length", text.len() as i64);
 
                 // Display the text part to the user with clear formatting
                 let formatted_text = text.trim();
@@ -659,10 +664,14 @@ impl CliApp {
                     } => {
                         count!("llm.streaming_follow_up_responses.mixed", 1);
                         count!("llm.streaming_follow_up_responses.mixed_valid", 1);
+                        count!("llm.streaming_follow_up_responses.total_mixed_valid", 1);
+                        gauge!("llm.streaming_follow_up_responses.mixed_valid_ratio", 100);
                     }
                     mcp_core::ValidationResult::Mixed { json_rpc: None, .. } => {
                         count!("llm.streaming_follow_up_responses.mixed", 1);
                         count!("llm.streaming_follow_up_responses.mixed_invalid", 1);
+                        count!("llm.streaming_follow_up_responses.total_mixed_invalid", 1);
+                        gauge!("llm.streaming_follow_up_responses.mixed_invalid_ratio", 100);
                     }
                     mcp_core::ValidationResult::NotJsonRpc(_) => {
                         count!("llm.streaming_follow_up_responses.not_jsonrpc", 1);
@@ -710,7 +719,8 @@ impl CliApp {
                         json_rpc: Some(_),
                     } => {
                         // We have both text and valid JSON-RPC in the follow-up
-                        debug!("Follow-up response contains both text and valid JSON-RPC");
+                        debug!("Follow-up response contains both text and valid JSON-RPC - text length: {}, json part present", text.len());
+                        gauge!("llm.streaming_follow_up_responses.mixed_text_length", text.len() as i64);
                         
                         // Display the text part to the user with clear formatting
                         let formatted_text = text.trim();
@@ -951,7 +961,8 @@ impl CliApp {
                 json_rpc: Some(json_rpc),
             } => {
                 // We have both text and valid JSON-RPC
-                debug!("Response contains both text and valid JSON-RPC");
+                debug!("Response contains both text and valid JSON-RPC - text length: {}, json part present", text.len());
+                gauge!("llm.responses.mixed_text_length", text.len() as i64);
 
                 // Display the text part to the user
                 let formatted_text = text.trim();
@@ -1054,10 +1065,14 @@ impl CliApp {
             } => {
                 count!("llm.follow_up_responses.mixed", 1);
                 count!("llm.follow_up_responses.mixed_valid", 1);
+                count!("llm.follow_up_responses.total_mixed_valid", 1);
+                gauge!("llm.follow_up_responses.mixed_valid_ratio", 100);
             }
             mcp_core::ValidationResult::Mixed { json_rpc: None, .. } => {
                 count!("llm.follow_up_responses.mixed", 1);
                 count!("llm.follow_up_responses.mixed_invalid", 1);
+                count!("llm.follow_up_responses.total_mixed_invalid", 1);
+                gauge!("llm.follow_up_responses.mixed_invalid_ratio", 100);
             }
             mcp_core::ValidationResult::NotJsonRpc(_) => {
                 count!("llm.follow_up_responses.not_jsonrpc", 1);
@@ -1102,7 +1117,8 @@ impl CliApp {
                 json_rpc: Some(json_rpc),
             } => {
                 // We have both text and valid JSON-RPC in the follow-up
-                debug!("Follow-up response contains both text and valid JSON-RPC");
+                debug!("Follow-up response contains both text and valid JSON-RPC - text length: {}, json part present", text.len());
+                gauge!("llm.follow_up_responses.mixed_text_length", text.len() as i64);
 
                 // Display the text part to the user
                 let formatted_text = text.trim();
@@ -1548,6 +1564,10 @@ impl CliApp {
 
         // Add the tool call info to conversation for context
         self.context.add_assistant_message(&tool_info);
+        
+        // Track tool call in mixed message context
+        count!("llm.mixed_message_tool_calls", 1);
+        count!("llm.mixed_message_tool_calls_by_type", 1);
 
         // Handle the tool call
         self.handle_tool_call(tool_call).await?;
