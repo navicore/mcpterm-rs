@@ -67,4 +67,4 @@ tracing-appender = "0.2"
 tracing-subscriber = "0.3.17"
 
 # For error handling
-thiserror = "1.0.43"
+thiserror = "2.0.12"
