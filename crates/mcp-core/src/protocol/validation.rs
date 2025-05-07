@@ -18,9 +18,13 @@ pub enum ValidationResult {
 
     /// Response is JSON but not valid JSON-RPC
     NotJsonRpc(Value),
+
+    /// Response contains multiple valid JSON-RPC objects
+    MultipleJsonRpc(Vec<Value>),
 }
 
 /// Check if a value is a valid JSON-RPC object
+#[cfg(test)]
 fn is_valid_jsonrpc(value: &Value) -> bool {
     // Must be an object
     if !value.is_object() {
@@ -45,6 +49,8 @@ fn is_valid_jsonrpc(value: &Value) -> bool {
     ((has_result != has_error) && has_id) || (has_method && has_params && has_id)
 }
 
+// We now use jsonrpc::extract_jsonrpc_objects instead
+
 /// Validate an LLM response to ensure it follows JSON-RPC format
 pub fn validate_llm_response(content: &str) -> ValidationResult {
     debug!("Validating LLM response format");
@@ -52,46 +58,60 @@ pub fn validate_llm_response(content: &str) -> ValidationResult {
     // Trim the content
     let trimmed = content.trim();
 
-    // Check if it's pure JSON first
-    if let Ok(json_value) = serde_json::from_str::<Value>(trimmed) {
-        // It parsed as JSON, but is it valid JSON-RPC?
-        if is_valid_jsonrpc(&json_value) {
-            debug!("Response is valid JSON-RPC");
-            return ValidationResult::Valid(json_value);
-        } else {
-            warn!("Response is JSON but not valid JSON-RPC");
-            return ValidationResult::NotJsonRpc(json_value);
-        }
+    // Use our JSON-RPC extractor to find all JSON-RPC objects
+    let json_objects = crate::jsonrpc::extract_jsonrpc_objects(trimmed);
+    debug!("Extracted {} JSON-RPC objects", json_objects.len());
+    
+    // If we found multiple JSON-RPC objects
+    if json_objects.len() > 1 {
+        debug!("Found {} valid JSON-RPC objects", json_objects.len());
+        return ValidationResult::MultipleJsonRpc(json_objects);
     }
-
-    // It's not pure JSON - check if it's a mixed response with both text and JSON
-
-    // Look for the first occurrence of '{'
-    if let Some(json_start) = trimmed.find('{') {
-        // Extract what looks like the JSON part
-        let possible_json = &trimmed[json_start..];
-
-        // Try to parse it
-        if let Ok(json_value) = serde_json::from_str::<Value>(possible_json) {
-            // It parsed as JSON, but is it valid JSON-RPC?
-            if is_valid_jsonrpc(&json_value) {
-                warn!("Response contains both text and valid JSON-RPC");
-                // Extract the text part
-                let text = trimmed[..json_start].trim().to_string();
-                return ValidationResult::Mixed {
-                    text,
-                    json_rpc: Some(json_value),
-                };
-            } else {
-                warn!("Response contains both text and invalid JSON");
-                // Extract the text part
-                let text = trimmed.to_string();
-                return ValidationResult::Mixed {
-                    text,
-                    json_rpc: None,
-                };
+    
+    // If we found exactly one JSON-RPC object
+    if json_objects.len() == 1 {
+        let json_value = &json_objects[0];
+        
+        // Check if the entire content is just this JSON object
+        if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
+            if parsed == *json_value {
+                debug!("Response is valid JSON-RPC");
+                return ValidationResult::Valid(parsed);
             }
         }
+        
+        // Otherwise, it's a mixed response with both text and JSON-RPC
+        warn!("Response contains both text and valid JSON-RPC");
+        
+        // Extract the text part - this is a bit tricky, let's find the JSON in the original text
+        if let Some(json_start) = trimmed.find('{') {
+            let text = trimmed[..json_start].trim().to_string();
+            return ValidationResult::Mixed {
+                text,
+                json_rpc: Some(json_value.clone()),
+            };
+        } else {
+            // Fallback - shouldn't happen since we found a JSON object
+            return ValidationResult::Mixed {
+                text: trimmed.to_string(),
+                json_rpc: Some(json_value.clone()),
+            };
+        }
+    }
+    
+    // No JSON-RPC objects found, check if it's regular JSON
+    if let Ok(json_value) = serde_json::from_str::<Value>(trimmed) {
+        warn!("Response is JSON but not valid JSON-RPC");
+        return ValidationResult::NotJsonRpc(json_value);
+    }
+    
+    // Check if it's a mixed response with invalid JSON
+    if trimmed.contains('{') && trimmed.contains('}') {
+        warn!("Response contains text mixed with invalid JSON");
+        return ValidationResult::Mixed {
+            text: trimmed.to_string(),
+            json_rpc: None,
+        };
     }
 
     // Not valid JSON and not a mixed response
@@ -105,6 +125,36 @@ pub fn create_correction_prompt(validation_result: &ValidationResult) -> String 
         ValidationResult::Valid(_) => {
             // No correction needed
             String::new()
+        }
+        ValidationResult::MultipleJsonRpc(objects) => {
+            format!(
+                "Your last response contained multiple JSON-RPC objects ({}). \
+                According to the MCP protocol, you should respond with a single JSON-RPC object at a time. \
+                If you need to perform multiple actions, make one tool call at a time and wait for the result.
+                
+                Please reformat your response as a single JSON-RPC object. For your next response, choose ONE of:
+                
+                1. A text response using:
+                {{
+                  \"jsonrpc\": \"2.0\",
+                  \"result\": \"Your message here...\",
+                  \"id\": \"response_id\"
+                }}
+                
+                2. OR a single tool call using:
+                {{
+                  \"jsonrpc\": \"2.0\",
+                  \"method\": \"mcp.tool_call\",
+                  \"params\": {{
+                    \"name\": \"tool_name\",
+                    \"parameters\": {{...}}
+                  }},
+                  \"id\": \"tool_call_id\"
+                }}
+                
+                Please respond with just ONE JSON-RPC object.",
+                objects.len()
+            )
         }
         ValidationResult::InvalidFormat(text) => {
             format!(

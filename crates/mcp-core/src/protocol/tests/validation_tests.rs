@@ -177,8 +177,8 @@ fn test_validate_multiple_json_objects() {
     let multiple = r#"{"jsonrpc":"2.0","result":"first","id":"1"} {"jsonrpc":"2.0","result":"second","id":"2"}"#;
     let result = validate_llm_response(multiple);
     assert!(
-        matches!(result, ValidationResult::InvalidFormat(_)),
-        "Should handle multiple JSON objects as invalid"
+        matches!(result, ValidationResult::MultipleJsonRpc(_)),
+        "Should handle multiple JSON objects as MultipleJsonRpc"
     );
 }
 

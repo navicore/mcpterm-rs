@@ -157,18 +157,8 @@ Here are the rules:
   "id": "<request_id>"
 }
 
-Examples of available tools:
-1. "shell": Execute a shell command
-   Parameters: { "command": "string" }
-
-2. "file_read": Read a file
-   Parameters: { "path": "string" }
-
-3. "file_write": Write to a file
-   Parameters: { "path": "string", "content": "string" }
-
-4. "search": Search for files or content
-   Parameters: { "query": "string", "path": "string" }
+// Tool definitions will be provided dynamically by the system.
+// Do not guess or make assumptions about available tools - only use tools explicitly defined in the prompt.
 
 Always ensure your responses are syntactically valid JSON. 
 Never include multiple JSON objects in a single response.
