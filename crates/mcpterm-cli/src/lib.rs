@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use futures::{Stream, StreamExt};
-use mcp_core::context::{ConversationContext, MessageRole};
 use mcp_core::commands::mcp::{ToolInfo, ToolProvider};
+use mcp_core::context::{ConversationContext, MessageRole};
 use mcp_core::{api_log, debug_log, SlashCommand, ValidationResult};
 use mcp_llm::{BedrockClient, BedrockConfig, LlmClient, StreamChunk};
 use mcp_metrics::{count, gauge, time};
@@ -69,31 +69,33 @@ impl Default for CliConfig {
 impl ToolProvider for CliApp {
     fn get_tools(&self) -> Vec<ToolInfo> {
         // Convert ToolMetadata to ToolInfo
-        self.tool_manager.get_tools()
+        self.tool_manager
+            .get_tools()
             .iter()
             .map(|tool| ToolInfo {
                 id: tool.id.clone(),
                 name: tool.name.clone(),
                 description: tool.description.clone(),
-                category: "core".to_string(),  // Default category
+                category: "core".to_string(), // Default category
                 input_schema: tool.input_schema.clone(),
-                output_schema: tool.output_schema.clone()
+                output_schema: tool.output_schema.clone(),
             })
             .collect()
     }
 
     fn get_tool_details(&self, tool_id: &str) -> Option<ToolInfo> {
         // Find the tool by ID and convert to ToolInfo
-        self.tool_manager.get_tools()
+        self.tool_manager
+            .get_tools()
             .iter()
             .find(|t| t.id == tool_id)
             .map(|tool| ToolInfo {
                 id: tool.id.clone(),
                 name: tool.name.clone(),
                 description: tool.description.clone(),
-                category: "core".to_string(),  // Default category
+                category: "core".to_string(), // Default category
                 input_schema: tool.input_schema.clone(),
-                output_schema: tool.output_schema.clone()
+                output_schema: tool.output_schema.clone(),
             })
     }
 }
@@ -221,23 +223,26 @@ impl CliApp {
                 Ok(p) => p,
                 Err(_) => format!("{:?}", params),
             };
-            
+
             // Display tool type and parameters
-            println!("Allow tool execution: {}", tool_id);
+            println!("\nAllow tool execution: {}", tool_id);
             println!("Parameters: {}", params_str);
             print!("Approve? [Y/n] ");
             std::io::stdout().flush()?;
 
             let mut input = String::new();
             std::io::stdin().read_line(&mut input)?;
-            
+
             // If input is empty or starts with 'y' or 'Y', approve
             let trimmed_input = input.trim().to_lowercase();
-            
+
             // Debug log the input for troubleshooting
-            debug_log(&format!("User input for tool approval: '{}' (len: {})", 
-                             trimmed_input, trimmed_input.len()));
-            
+            debug_log(&format!(
+                "User input for tool approval: '{}' (len: {})",
+                trimmed_input,
+                trimmed_input.len()
+            ));
+
             // Only reject if the input is NOT empty AND does NOT start with 'y'
             if !trimmed_input.is_empty() && !trimmed_input.starts_with('y') {
                 debug_log("User denied tool execution");
@@ -248,7 +253,7 @@ impl CliApp {
                     error: Some("Tool execution was denied by the user".to_string()),
                 });
             }
-            
+
             debug_log("User approved tool execution (or used default approval)");
         }
 
@@ -291,7 +296,7 @@ impl CliApp {
         self.llm_client = Some(Arc::new(client));
         self
     }
-    
+
     // Get a slash command handler for the CLI
     pub fn get_slash_command_handler(&self) -> Box<dyn SlashCommand> {
         // Create a new MCP command handler
@@ -323,11 +328,17 @@ impl CliApp {
         } else if error_msg.contains("AccessDeniedException") {
             return Err(anyhow!("Access denied to the Bedrock service. Please check your AWS credentials and permissions."));
         } else if error_msg.contains("ValidationException") {
-            return Err(anyhow!("Invalid request parameters. Please check the model ID and request configuration."));
+            return Err(anyhow!(
+                "Invalid request parameters. Please check the model ID and request configuration."
+            ));
         } else if error_msg.contains("ThrottlingException") {
-            return Err(anyhow!("Request throttled by AWS. Please try again later or reduce the request rate."));
+            return Err(anyhow!(
+                "Request throttled by AWS. Please try again later or reduce the request rate."
+            ));
         } else if error_msg.contains("ServiceQuotaExceededException") {
-            return Err(anyhow!("AWS service quota exceeded. You may need to request a quota increase for Bedrock."));
+            return Err(anyhow!(
+                "AWS service quota exceeded. You may need to request a quota increase for Bedrock."
+            ));
         }
         // Default case
         Err(anyhow!("Error connecting to AWS Bedrock: {}", e))
@@ -450,26 +461,29 @@ impl CliApp {
 
                 // Check if the response is a valid JSON-RPC response
                 let validation_result = mcp_core::validate_llm_response(&response_content);
-                
+
                 // Parse the response to understand its content
                 match &validation_result {
                     ValidationResult::Valid(json) => {
                         // If it's a tool call, it's already handled during streaming
-                        if json.get("method").map_or(false, |m| m.as_str() == Some("mcp.tool_call")) {
+                        if json
+                            .get("method")
+                            .map_or(false, |m| m.as_str() == Some("mcp.tool_call"))
+                        {
                             debug_log("Response contains a valid tool call");
                             // Let the streaming process handle it
                             Ok(response_content)
                         } else if json.get("result").is_some() && !self.has_recent_tool_messages() {
                             // This is a valid text response with no tool call - we need to automatically follow up
                             debug_log("Response is a valid text response with no tool call - sending a follow-up");
-                            
+
                             // The LLM gave text but no tool call - we need to continue the conversation
                             let follow_up_prompt = "Please continue helping the user with their request using appropriate tool calls.";
                             debug_log(&format!("Sending follow-up prompt: {}", follow_up_prompt));
-                            
+
                             // Add the follow-up as a user message
                             self.context.add_user_message(follow_up_prompt);
-                            
+
                             // Get a follow-up response from the LLM
                             self.get_streaming_follow_up_response().await
                         } else {
@@ -489,52 +503,72 @@ impl CliApp {
 
                         // Add the correction as a user message and get a corrected response
                         self.context.add_user_message(&correction);
-                        
+
                         // Get a corrected response
                         self.get_streaming_follow_up_response().await
                     }
                     ValidationResult::Mixed { json_rpc, text } => {
                         debug!("Mixed content with text and JSON-RPC");
-                        
+
                         // Display the text part for the user
                         println!("{}", text);
-                        
+
                         // Check if there's a JSON-RPC object in the mixed content that's a tool call
                         if let Some(json) = json_rpc {
                             if let Some(method) = json.get("method").and_then(|v| v.as_str()) {
                                 if method == "mcp.tool_call" {
                                     if let Some(params) = json.get("params") {
-                                        if let Some(tool_name) = params.get("name").and_then(|v| v.as_str()) {
+                                        if let Some(tool_name) =
+                                            params.get("name").and_then(|v| v.as_str())
+                                        {
                                             if let Some(parameters) = params.get("parameters") {
-                                                debug_log(&format!("Mixed content contains tool call: {}", tool_name));
-                                                
+                                                debug_log(&format!(
+                                                    "Mixed content contains tool call: {}",
+                                                    tool_name
+                                                ));
+
                                                 // Add the assistant's mixed content message to the context
-                                                self.context.add_assistant_message(&response_content);
-                                                
+                                                self.context
+                                                    .add_assistant_message(&response_content);
+
                                                 // Execute the tool call
-                                                if let Err(e) = self.handle_tool_call_execution(tool_name, parameters.clone()).await {
-                                                    debug_log(&format!("Error executing tool: {}", e));
+                                                if let Err(e) = self
+                                                    .handle_tool_call_execution(
+                                                        tool_name,
+                                                        parameters.clone(),
+                                                    )
+                                                    .await
+                                                {
+                                                    debug_log(&format!(
+                                                        "Error executing tool: {}",
+                                                        e
+                                                    ));
                                                 }
-                                                
+
                                                 // Follow up with the LLM to continue the conversation
                                                 let follow_up_prompt = "Please continue helping the user with their request based on the tool results.";
-                                                debug_log(&format!("Sending follow-up prompt: {}", follow_up_prompt));
-                                                
+                                                debug_log(&format!(
+                                                    "Sending follow-up prompt: {}",
+                                                    follow_up_prompt
+                                                ));
+
                                                 // Add the follow-up as a user message
                                                 self.context.add_user_message(follow_up_prompt);
-                                                
+
                                                 // Get a follow-up response from the LLM
-                                                return self.get_streaming_follow_up_response().await;
+                                                return self
+                                                    .get_streaming_follow_up_response()
+                                                    .await;
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                        
+
                         // If no tool call or couldn't extract parameters, just return the response
                         Ok(response_content)
-                    },
+                    }
                     ValidationResult::NotJsonRpc(_) | ValidationResult::InvalidFormat(_) => {
                         // Handle other cases - just return the content
                         Ok(response_content)
@@ -633,11 +667,11 @@ impl CliApp {
                         // Try to extract JSON-RPC objects from the accumulated content
                         debug_log("Attempting to extract JSON-RPC objects from response content");
                         let json_objects = mcp_core::extract_jsonrpc_objects(&response_content);
-                        
+
                         // If we found JSON-RPC objects, we need to extract the surrounding text
                         if !json_objects.is_empty() {
                             let mut remaining_text = response_content.clone();
-                            
+
                             // Create a serialized version of each JSON object to find it in the text
                             for json_obj in &json_objects {
                                 // Skip if already processed
@@ -647,55 +681,79 @@ impl CliApp {
                                         continue;
                                     }
                                 }
-                                
+
                                 // Serialize the object to find it in the text
-                                let serialized = serde_json::to_string(json_obj).unwrap_or_default();
-                                
+                                let serialized =
+                                    serde_json::to_string(json_obj).unwrap_or_default();
+
                                 // Find the JSON object in the text
                                 if let Some(idx) = remaining_text.find(&serialized) {
                                     // Everything before this JSON object is text to display
                                     let text_before = remaining_text[..idx].trim();
                                     if !text_before.is_empty() {
-                                        debug_log(&format!("Found text to display before JSON-RPC: {}", text_before));
+                                        debug_log(&format!(
+                                            "Found text to display before JSON-RPC: {}",
+                                            text_before
+                                        ));
                                         println!("{}", text_before);
                                         // Also clear it from content_buffer if it's there
                                         if content_buffer.contains(text_before) {
-                                            content_buffer = content_buffer.replace(text_before, "");
+                                            content_buffer =
+                                                content_buffer.replace(text_before, "");
                                         }
                                     }
-                                    
+
                                     // Remove the processed part (text + JSON) from remaining text
-                                    remaining_text = remaining_text[idx + serialized.len()..].to_string();
+                                    remaining_text =
+                                        remaining_text[idx + serialized.len()..].to_string();
                                 }
-                                
+
                                 // Check if this is a regular message with a result field
                                 if let Some(result) = json_obj.get("result") {
                                     if let Some(text) = result.as_str() {
-                                        debug_log(&format!("Found result text in JSON-RPC: {} chars", text.len()));
+                                        debug_log(&format!(
+                                            "Found result text in JSON-RPC: {} chars",
+                                            text.len()
+                                        ));
                                         println!("{}", text);
-                                        
+
                                         // Remember that we've processed this message
-                                        if let Some(id) = json_obj.get("id").and_then(|v| v.as_str()) {
+                                        if let Some(id) =
+                                            json_obj.get("id").and_then(|v| v.as_str())
+                                        {
                                             processed_jsonrpc_ids.push(id.to_string());
                                         }
                                     }
                                 }
-                                
+
                                 // Process the JSON object if it's a tool call
-                                if let Some(method) = json_obj.get("method").and_then(|v| v.as_str()) {
+                                if let Some(method) =
+                                    json_obj.get("method").and_then(|v| v.as_str())
+                                {
                                     if method == "mcp.tool_call" {
                                         if let Some(params) = json_obj.get("params") {
-                                            if let Some(tool_name) = params.get("name").and_then(|v| v.as_str()) {
+                                            if let Some(tool_name) =
+                                                params.get("name").and_then(|v| v.as_str())
+                                            {
                                                 if let Some(parameters) = params.get("parameters") {
-                                                    if let Some(id) = json_obj.get("id").and_then(|v| v.as_str()) {
+                                                    if let Some(id) =
+                                                        json_obj.get("id").and_then(|v| v.as_str())
+                                                    {
                                                         had_tool_call = true;
                                                         is_current_buffer_tool_call = true;
-                                                        
-                                                        debug_log(&format!("Extracted tool call: {} with id: {}", tool_name, id));
-                                                        
+
+                                                        debug_log(&format!(
+                                                            "Extracted tool call: {} with id: {}",
+                                                            tool_name, id
+                                                        ));
+
                                                         // Execute the tool call
-                                                        self.handle_tool_call_execution(tool_name, parameters.clone()).await?;
-                                                        
+                                                        self.handle_tool_call_execution(
+                                                            tool_name,
+                                                            parameters.clone(),
+                                                        )
+                                                        .await?;
+
                                                         // Remember that we've processed this tool call
                                                         processed_jsonrpc_ids.push(id.to_string());
                                                     }
@@ -705,11 +763,14 @@ impl CliApp {
                                     }
                                 }
                             }
-                            
+
                             // After processing all JSON objects, display any remaining text
                             let remaining_text = remaining_text.trim();
                             if !remaining_text.is_empty() {
-                                debug_log(&format!("Found text to display after all JSON-RPC: {}", remaining_text));
+                                debug_log(&format!(
+                                    "Found text to display after all JSON-RPC: {}",
+                                    remaining_text
+                                ));
                                 println!("{}", remaining_text);
                                 // Also clear it from content_buffer if it's there
                                 if content_buffer.contains(remaining_text) {
@@ -748,40 +809,52 @@ impl CliApp {
 
                         // Make one final attempt to extract any JSON-RPC objects from the full response
                         if response_content.contains("\"jsonrpc\":\"2.0\"") {
-                            debug_log("Final attempt to extract JSON-RPC objects from complete response");
+                            debug_log(
+                                "Final attempt to extract JSON-RPC objects from complete response",
+                            );
                             let json_objects = mcp_core::extract_jsonrpc_objects(&response_content);
-                            
+
                             for json_obj in json_objects {
                                 // Check if this is a tool call and if we've processed it already
                                 if let Some(id) = json_obj.get("id").and_then(|v| v.as_str()) {
                                     if processed_jsonrpc_ids.contains(&id.to_string()) {
                                         continue;
                                     }
-                                    
+
                                     // Check if this is a regular message with a result field
                                     if let Some(result) = json_obj.get("result") {
                                         if let Some(text) = result.as_str() {
                                             debug_log(&format!("Found result text in final JSON-RPC extraction: {} chars", text.len()));
                                             println!("{}", text);
-                                            
+
                                             // Remember that we've processed this message
                                             processed_jsonrpc_ids.push(id.to_string());
                                         }
                                     }
-                                    
+
                                     // If it's a tool call, extract the tool name and parameters
-                                    if let Some(method) = json_obj.get("method").and_then(|v| v.as_str()) {
+                                    if let Some(method) =
+                                        json_obj.get("method").and_then(|v| v.as_str())
+                                    {
                                         if method == "mcp.tool_call" {
                                             if let Some(params) = json_obj.get("params") {
-                                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str()) {
-                                                    if let Some(parameters) = params.get("parameters") {
+                                                if let Some(tool_name) =
+                                                    params.get("name").and_then(|v| v.as_str())
+                                                {
+                                                    if let Some(parameters) =
+                                                        params.get("parameters")
+                                                    {
                                                         had_tool_call = true;
-                                                        
+
                                                         debug_log(&format!("Final extraction found tool call: {} with id: {}", tool_name, id));
-                                                        
+
                                                         // Execute the tool call
-                                                        self.handle_tool_call_execution(tool_name, parameters.clone()).await?;
-                                                        
+                                                        self.handle_tool_call_execution(
+                                                            tool_name,
+                                                            parameters.clone(),
+                                                        )
+                                                        .await?;
+
                                                         // Remember that we've processed this tool call
                                                         processed_jsonrpc_ids.push(id.to_string());
                                                     }
@@ -837,52 +910,60 @@ impl CliApp {
         // Get the initial response
         let client = self.llm_client.as_ref().unwrap();
         let response = client.send_message(&self.context).await?;
-        
+
         // Add the response to the conversation context
         self.context.add_assistant_message(&response.content);
-        
+
         // Get any tool calls
         let has_tool_calls = !response.tool_calls.is_empty();
-        
+
         // If no tool calls, we're done
         if !has_tool_calls {
             return Ok(response.content);
         }
-        
+
         // Process tool calls - we need to create a new scope to avoid borrow checker issues
         debug_log("Detected tool call in non-streaming response");
-        
+
         // Process each tool call
         for tool_call in &response.tool_calls {
             self.process_tool_call(tool_call).await?;
         }
-        
+
         // Get follow-up response by calling a helper method to avoid borrow checker issues
         self.get_tool_result_follow_up().await
     }
-    
+
     // Helper method to process a single tool call
     async fn process_tool_call(&mut self, tool_call: &mcp_llm::ToolCall) -> Result<()> {
-        if let Err(e) = self.handle_tool_call_execution(&tool_call.tool, tool_call.params.clone()).await {
+        if let Err(e) = self
+            .handle_tool_call_execution(&tool_call.tool, tool_call.params.clone())
+            .await
+        {
             debug_log(&format!("Tool execution error: {}", e));
         }
         Ok(())
     }
-    
+
     // Helper method to get a follow-up response after tool execution
     async fn get_tool_result_follow_up(&mut self) -> Result<String> {
         // Add message asking for a follow-up
         debug_log("Getting follow-up response after tool execution");
-        self.context.add_user_message("Please continue with your response based on the tool results.");
-        
+        self.context
+            .add_user_message("Please continue with your response based on the tool results.");
+
         // Get the follow-up response
         let client = self.llm_client.as_ref().unwrap();
         let follow_up_result = client.send_message(&self.context).await?;
-        debug_log(&format!("Received follow-up response: {} chars", follow_up_result.content.len()));
-        
+        debug_log(&format!(
+            "Received follow-up response: {} chars",
+            follow_up_result.content.len()
+        ));
+
         // Add the follow-up response to the conversation context
-        self.context.add_assistant_message(&follow_up_result.content);
-        
+        self.context
+            .add_assistant_message(&follow_up_result.content);
+
         // Return the follow-up response
         Ok(follow_up_result.content)
     }
@@ -897,41 +978,58 @@ impl CliApp {
     }
 
     // Function to execute tool calls
-    async fn handle_tool_call_execution(&mut self, tool_name: &str, parameters: Value) -> Result<()> {
+    async fn handle_tool_call_execution(
+        &mut self,
+        tool_name: &str,
+        parameters: Value,
+    ) -> Result<()> {
         // Execute the tool and capture the result
         match self.execute_tool(tool_name, parameters).await {
             Ok(result) => {
                 // Convert the result to a string representation
                 let result_json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| {
-                    format!("{{\"status\": \"{:?}\", \"tool_id\": \"{}\"}}", result.status, result.tool_id)
+                    format!(
+                        "{{\"status\": \"{:?}\", \"tool_id\": \"{}\"}}",
+                        result.status, result.tool_id
+                    )
                 });
-                
+
                 // Add the tool message to the conversation context
-                debug_log(&format!("Adding tool result to conversation context: {}", tool_name));
+                debug_log(&format!(
+                    "Adding tool result to conversation context: {}",
+                    tool_name
+                ));
                 self.context.add_tool_message(&result_json);
-                
+
                 Ok(())
-            },
-            Err(e) => Err(anyhow!("Error executing tool: {}", e))
+            }
+            Err(e) => Err(anyhow!("Error executing tool: {}", e)),
         }
     }
 
     // Function to handle validation results
-    async fn handle_follow_up_validation_result(&mut self, validation_result: &ValidationResult, content: &str) -> Result<()> {
+    async fn handle_follow_up_validation_result(
+        &mut self,
+        validation_result: &ValidationResult,
+        content: &str,
+    ) -> Result<()> {
         debug!("Processing follow-up validation result");
-        
+
         match validation_result {
             ValidationResult::Valid(json) => {
                 debug!("Valid JSON-RPC response");
-                
+
                 // Check if this is a text response (result field)
                 if let Some(result) = json.get("result") {
                     if let Some(text) = result.as_str() {
-                        debug_log(&format!("Displaying text response from result field: {} chars", text.len()));
+                        debug_log(&format!(
+                            "Displaying text response from result field: {} chars",
+                            text.len()
+                        ));
                         println!("{}", text);
                     }
-                } 
-                
+                }
+
                 // Check if this is a tool call
                 if let Some(method) = json.get("method").and_then(|v| v.as_str()) {
                     if method == "mcp.tool_call" {
@@ -939,28 +1037,38 @@ impl CliApp {
                             if let Some(tool_name) = params.get("name").and_then(|v| v.as_str()) {
                                 if let Some(parameters) = params.get("parameters") {
                                     debug_log(&format!("Executing tool call: {}", tool_name));
-                                    self.handle_tool_call_execution(tool_name, parameters.clone()).await?;
-                                    
+                                    self.handle_tool_call_execution(tool_name, parameters.clone())
+                                        .await?;
+
                                     // If we have an ID, create a more structured response
                                     if let Some(id) = json.get("id") {
-                                        debug_log(&format!("Adding tool result message for ID: {}", id));
-                                        self.context.add_tool_message(&format!("Executed tool: {}", tool_name));
+                                        debug_log(&format!(
+                                            "Adding tool result message for ID: {}",
+                                            id
+                                        ));
+                                        self.context.add_tool_message(&format!(
+                                            "Executed tool: {}",
+                                            tool_name
+                                        ));
                                     }
                                 }
                             }
                         }
                     }
                 }
-            },
+            }
             ValidationResult::Mixed { text, json_rpc } => {
                 debug!("Mixed content with text and JSON-RPC");
-                
+
                 // Always display the text part if it's not empty
                 if !text.trim().is_empty() {
-                    debug_log(&format!("Displaying text part from mixed content: {} chars", text.len()));
+                    debug_log(&format!(
+                        "Displaying text part from mixed content: {} chars",
+                        text.len()
+                    ));
                     println!("{}", text);
                 }
-                
+
                 // If there's a JSON-RPC object in the mixed content
                 if let Some(json) = json_rpc {
                     // Check if this is a text response (result field)
@@ -970,20 +1078,34 @@ impl CliApp {
                             println!("{}", text);
                         }
                     }
-                    
+
                     // Check if this is a tool call
                     if let Some(method) = json.get("method").and_then(|v| v.as_str()) {
                         if method == "mcp.tool_call" {
                             if let Some(params) = json.get("params") {
-                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str()) {
+                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str())
+                                {
                                     if let Some(parameters) = params.get("parameters") {
-                                        debug_log(&format!("Executing tool call from mixed content: {}", tool_name));
-                                        self.handle_tool_call_execution(tool_name, parameters.clone()).await?;
-                                        
+                                        debug_log(&format!(
+                                            "Executing tool call from mixed content: {}",
+                                            tool_name
+                                        ));
+                                        self.handle_tool_call_execution(
+                                            tool_name,
+                                            parameters.clone(),
+                                        )
+                                        .await?;
+
                                         // If we have an ID, create a more structured response
                                         if let Some(id) = json.get("id") {
-                                            debug_log(&format!("Adding tool result message for ID: {}", id));
-                                            self.context.add_tool_message(&format!("Executed tool: {}", tool_name));
+                                            debug_log(&format!(
+                                                "Adding tool result message for ID: {}",
+                                                id
+                                            ));
+                                            self.context.add_tool_message(&format!(
+                                                "Executed tool: {}",
+                                                tool_name
+                                            ));
                                         }
                                     }
                                 }
@@ -991,10 +1113,10 @@ impl CliApp {
                         }
                     }
                 }
-            },
+            }
             ValidationResult::MultipleJsonRpc(objects) => {
                 debug!("Multiple JSON-RPC objects");
-                
+
                 // Process each JSON-RPC object
                 for json in objects {
                     // Check if this is a text response (result field)
@@ -1004,20 +1126,34 @@ impl CliApp {
                             println!("{}", text);
                         }
                     }
-                    
+
                     // Check if this is a tool call
                     if let Some(method) = json.get("method").and_then(|v| v.as_str()) {
                         if method == "mcp.tool_call" {
                             if let Some(params) = json.get("params") {
-                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str()) {
+                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str())
+                                {
                                     if let Some(parameters) = params.get("parameters") {
-                                        debug_log(&format!("Executing tool call from multiple JSON-RPC: {}", tool_name));
-                                        self.handle_tool_call_execution(tool_name, parameters.clone()).await?;
-                                        
+                                        debug_log(&format!(
+                                            "Executing tool call from multiple JSON-RPC: {}",
+                                            tool_name
+                                        ));
+                                        self.handle_tool_call_execution(
+                                            tool_name,
+                                            parameters.clone(),
+                                        )
+                                        .await?;
+
                                         // If we have an ID, create a more structured response
                                         if let Some(id) = json.get("id") {
-                                            debug_log(&format!("Adding tool result message for ID: {}", id));
-                                            self.context.add_tool_message(&format!("Executed tool: {}", tool_name));
+                                            debug_log(&format!(
+                                                "Adding tool result message for ID: {}",
+                                                id
+                                            ));
+                                            self.context.add_tool_message(&format!(
+                                                "Executed tool: {}",
+                                                tool_name
+                                            ));
                                         }
                                     }
                                 }
@@ -1025,32 +1161,38 @@ impl CliApp {
                         }
                     }
                 }
-            },
+            }
             ValidationResult::NotJsonRpc(_) => {
                 debug!("Not a valid JSON-RPC response");
                 // For non-JSON-RPC responses, if it's not empty, print it
                 if !content.trim().is_empty() {
-                    debug_log(&format!("Displaying non-JSON-RPC content: {} chars", content.len()));
+                    debug_log(&format!(
+                        "Displaying non-JSON-RPC content: {} chars",
+                        content.len()
+                    ));
                     println!("{}", content);
                 }
-            },
+            }
             ValidationResult::InvalidFormat(text) => {
                 debug!("Invalid format response");
                 // For invalid format responses, if it's not empty, print it
                 if !text.trim().is_empty() {
-                    debug_log(&format!("Displaying invalid format content: {} chars", text.len()));
+                    debug_log(&format!(
+                        "Displaying invalid format content: {} chars",
+                        text.len()
+                    ));
                     println!("{}", text);
                 }
-            },
+            }
         }
-        
+
         // After processing, always add the assistant's response to the context for future reference
         // This ensures the conversation context is maintained properly
         if !content.is_empty() {
             debug!("Adding assistant message to context");
             self.context.add_assistant_message(content);
         }
-        
+
         Ok(())
     }
 
@@ -1060,10 +1202,8 @@ impl CliApp {
         let client = self.llm_client.as_ref().unwrap();
         let result = client.stream_message(&self.context).await;
         match result {
-            Ok(mut stream) => {
-                self.process_streaming_response(&mut stream).await
-            }
-            Err(e) => Err(anyhow!("Error getting corrected response: {}", e))
+            Ok(mut stream) => self.process_streaming_response(&mut stream).await,
+            Err(e) => Err(anyhow!("Error getting corrected response: {}", e)),
         }
     }
 
@@ -1071,22 +1211,22 @@ impl CliApp {
     pub fn has_recent_tool_messages(&self) -> bool {
         // Scan the last few messages to see if any are tool messages
         let messages = &self.context.messages;
-        
+
         // Only check the last 10 messages at most
         let check_count = 10.min(messages.len());
         if check_count == 0 {
             return false;
         }
-        
+
         let start_idx = messages.len() - check_count;
-        
+
         // Look for any tool messages in the recent messages
         for idx in start_idx..messages.len() {
             if messages[idx].role == MessageRole::Tool {
                 return true;
             }
         }
-        
+
         false
     }
 
@@ -1101,8 +1241,12 @@ impl CliApp {
         // Return the last N message roles from the context
         let mut roles = Vec::new();
         let messages = &self.context.messages;
-        let start = if messages.len() > count { messages.len() - count } else { 0 };
-        
+        let start = if messages.len() > count {
+            messages.len() - count
+        } else {
+            0
+        };
+
         for msg in messages[start..].iter() {
             roles.push(match msg.role {
                 MessageRole::User => "user",
@@ -1111,7 +1255,7 @@ impl CliApp {
                 MessageRole::Tool => "tool",
             });
         }
-        
+
         roles.join(",")
     }
 
@@ -1127,7 +1271,9 @@ impl CliApp {
         // For testing environments, avoid infinite recursion by checking if we're too deep
         // in follow-up responses (indicated by many messages in the context)
         if self.context.messages.len() > 15 {
-            debug_log("Too many follow-up messages detected, ending recursion to prevent test hangs");
+            debug_log(
+                "Too many follow-up messages detected, ending recursion to prevent test hangs",
+            );
             return Ok(String::new());
         }
 
@@ -1204,74 +1350,83 @@ impl CliApp {
                 if !received_content {
                     debug_log("Received empty follow-up response from LLM");
                     println!("Project created successfully.");
-                    
+
                     // Add an empty message to the conversation context
                     self.context.add_assistant_message("");
-                    
+
                     return Ok(String::new());
                 }
 
                 // Check if we need to validate and process the response for tool calls
                 debug!("Checking if follow-up response contains tool calls");
                 let validation_result = mcp_core::validate_llm_response(&follow_up_content);
-                
+
                 // Flag to track if we detected a tool call in the response
                 let mut has_tool_call = false;
-                
+
                 // Display a default message if the follow-up content is very small (likely empty or whitespace)
                 if follow_up_content.trim().len() < 5 {
-                    debug_log("Received minimal follow-up response from LLM, displaying success message");
+                    debug_log(
+                        "Received minimal follow-up response from LLM, displaying success message",
+                    );
                     println!("Project created successfully.");
                 }
-                
+
                 // Check for tool calls based on the validation result type
                 match &validation_result {
                     ValidationResult::Valid(json) => {
-                        has_tool_call = json.get("method").map_or(false, |m| m.as_str() == Some("mcp.tool_call"));
-                    },
+                        has_tool_call = json
+                            .get("method")
+                            .map_or(false, |m| m.as_str() == Some("mcp.tool_call"));
+                    }
                     ValidationResult::Mixed { json_rpc, .. } => {
                         if let Some(json) = json_rpc {
-                            has_tool_call = json.get("method").map_or(false, |m| m.as_str() == Some("mcp.tool_call"));
+                            has_tool_call = json
+                                .get("method")
+                                .map_or(false, |m| m.as_str() == Some("mcp.tool_call"));
                         }
-                    },
+                    }
                     ValidationResult::MultipleJsonRpc(objects) => {
-                        has_tool_call = objects.iter().any(|json| 
-                            json.get("method").map_or(false, |m| m.as_str() == Some("mcp.tool_call"))
-                        );
-                    },
+                        has_tool_call = objects.iter().any(|json| {
+                            json.get("method")
+                                .map_or(false, |m| m.as_str() == Some("mcp.tool_call"))
+                        });
+                    }
                     ValidationResult::InvalidFormat(content) => {
                         // Handle empty or whitespace-only responses
                         if content.trim().is_empty() {
                             debug_log("Received empty or whitespace-only response");
                             // Message already displayed above if content was minimal
-                            
+
                             // Add an empty message to the conversation context
                             self.context.add_assistant_message("");
-                            
+
                             return Ok(String::new());
                         }
-                    },
+                    }
                     _ => {}
                 }
-                
+
                 // Process the tool calls in the validation result
-                self.handle_follow_up_validation_result(&validation_result, &follow_up_content).await?;
-                
+                self.handle_follow_up_validation_result(&validation_result, &follow_up_content)
+                    .await?;
+
                 // Add the assistant's response to the context for future reference
                 debug!("Adding assistant response to context");
                 self.context.add_assistant_message(&follow_up_content);
-                
+
                 // If we found a tool call in the response, we need to add a tool result message
                 // and then get another follow-up response
                 if has_tool_call || had_tool_call {
                     debug_log("Tool call detected and executed, getting another follow-up");
-                    
+
                     // Add a message asking for continuation
-                    self.context.add_user_message("Please continue helping the user with their request.");
-                    
+                    self.context
+                        .add_user_message("Please continue helping the user with their request.");
+
                     // Recursively get another follow-up response
                     let recursive_response = self.get_streaming_follow_up_response().await?;
-                    
+
                     // Only combine responses if the recursive response is not empty
                     if !recursive_response.is_empty() {
                         let mut combined_response = follow_up_content;
@@ -1279,7 +1434,7 @@ impl CliApp {
                         combined_response.push_str(&recursive_response);
                         return Ok(combined_response);
                     }
-                    
+
                     // Otherwise just return the current response
                     return Ok(follow_up_content);
                 }
