@@ -648,6 +648,19 @@ impl CliApp {
                                     remaining_text = remaining_text[idx + serialized.len()..].to_string();
                                 }
                                 
+                                // Check if this is a regular message with a result field
+                                if let Some(result) = json_obj.get("result") {
+                                    if let Some(text) = result.as_str() {
+                                        debug_log(&format!("Found result text in JSON-RPC: {} chars", text.len()));
+                                        println!("{}", text);
+                                        
+                                        // Remember that we've processed this message
+                                        if let Some(id) = json_obj.get("id").and_then(|v| v.as_str()) {
+                                            processed_jsonrpc_ids.push(id.to_string());
+                                        }
+                                    }
+                                }
+                                
                                 // Process the JSON object if it's a tool call
                                 if let Some(method) = json_obj.get("method").and_then(|v| v.as_str()) {
                                     if method == "mcp.tool_call" {
@@ -723,6 +736,17 @@ impl CliApp {
                                 if let Some(id) = json_obj.get("id").and_then(|v| v.as_str()) {
                                     if processed_jsonrpc_ids.contains(&id.to_string()) {
                                         continue;
+                                    }
+                                    
+                                    // Check if this is a regular message with a result field
+                                    if let Some(result) = json_obj.get("result") {
+                                        if let Some(text) = result.as_str() {
+                                            debug_log(&format!("Found result text in final JSON-RPC extraction: {} chars", text.len()));
+                                            println!("{}", text);
+                                            
+                                            // Remember that we've processed this message
+                                            processed_jsonrpc_ids.push(id.to_string());
+                                        }
                                     }
                                     
                                     // If it's a tool call, extract the tool name and parameters
@@ -834,7 +858,15 @@ impl CliApp {
             ValidationResult::Valid(json) => {
                 debug!("Valid JSON-RPC response");
                 
-                // If this is a tool call, execute it
+                // Check if this is a text response (result field)
+                if let Some(result) = json.get("result") {
+                    if let Some(text) = result.as_str() {
+                        debug_log(&format!("Displaying text response from result field: {} chars", text.len()));
+                        println!("{}", text);
+                    }
+                } 
+                
+                // Check if this is a tool call
                 if let Some(method) = json.get("method").and_then(|v| v.as_str()) {
                     if method == "mcp.tool_call" {
                         if let Some(params) = json.get("params") {
@@ -854,11 +886,26 @@ impl CliApp {
                     }
                 }
             },
-            ValidationResult::Mixed { json_rpc, .. } => {
+            ValidationResult::Mixed { text, json_rpc } => {
                 debug!("Mixed content with text and JSON-RPC");
                 
-                // If there's a JSON-RPC object in the mixed content, try to execute it
+                // Always display the text part if it's not empty
+                if !text.trim().is_empty() {
+                    debug_log(&format!("Displaying text part from mixed content: {} chars", text.len()));
+                    println!("{}", text);
+                }
+                
+                // If there's a JSON-RPC object in the mixed content
                 if let Some(json) = json_rpc {
+                    // Check if this is a text response (result field)
+                    if let Some(result) = json.get("result") {
+                        if let Some(text) = result.as_str() {
+                            debug_log(&format!("Displaying text response from result field (mixed content): {} chars", text.len()));
+                            println!("{}", text);
+                        }
+                    }
+                    
+                    // Check if this is a tool call
                     if let Some(method) = json.get("method").and_then(|v| v.as_str()) {
                         if method == "mcp.tool_call" {
                             if let Some(params) = json.get("params") {
@@ -884,6 +931,15 @@ impl CliApp {
                 
                 // Process each JSON-RPC object
                 for json in objects {
+                    // Check if this is a text response (result field)
+                    if let Some(result) = json.get("result") {
+                        if let Some(text) = result.as_str() {
+                            debug_log(&format!("Displaying text response from result field (multiple JSON-RPC): {} chars", text.len()));
+                            println!("{}", text);
+                        }
+                    }
+                    
+                    // Check if this is a tool call
                     if let Some(method) = json.get("method").and_then(|v| v.as_str()) {
                         if method == "mcp.tool_call" {
                             if let Some(params) = json.get("params") {
@@ -906,9 +962,19 @@ impl CliApp {
             },
             ValidationResult::NotJsonRpc(_) => {
                 debug!("Not a valid JSON-RPC response");
+                // For non-JSON-RPC responses, if it's not empty, print it
+                if !content.trim().is_empty() {
+                    debug_log(&format!("Displaying non-JSON-RPC content: {} chars", content.len()));
+                    println!("{}", content);
+                }
             },
-            ValidationResult::InvalidFormat(_) => {
+            ValidationResult::InvalidFormat(text) => {
                 debug!("Invalid format response");
+                // For invalid format responses, if it's not empty, print it
+                if !text.trim().is_empty() {
+                    debug_log(&format!("Displaying invalid format content: {} chars", text.len()));
+                    println!("{}", text);
+                }
             },
         }
         
@@ -1014,10 +1080,12 @@ impl CliApp {
                 let mut is_tool_call = false;
                 let mut chunk_buffer = String::new();
                 let mut had_tool_call = false;
+                let mut received_content = false;
 
                 while let Some(follow_up_chunk_result) = follow_up_stream.next().await {
                     if let Ok(follow_up_chunk) = follow_up_chunk_result {
                         if !follow_up_chunk.content.is_empty() {
+                            received_content = true;
                             follow_up_content.push_str(&follow_up_chunk.content);
 
                             // Check if this is a tool call (we don't want to print those)
@@ -1059,12 +1127,29 @@ impl CliApp {
                     }
                 }
 
+                // If we didn't receive any content, log this fact and display a message
+                if !received_content {
+                    debug_log("Received empty follow-up response from LLM");
+                    println!("Project created successfully.");
+                    
+                    // Add an empty message to the conversation context
+                    self.context.add_assistant_message("");
+                    
+                    return Ok(String::new());
+                }
+
                 // Check if we need to validate and process the response for tool calls
                 debug!("Checking if follow-up response contains tool calls");
                 let validation_result = mcp_core::validate_llm_response(&follow_up_content);
                 
                 // Flag to track if we detected a tool call in the response
                 let mut has_tool_call = false;
+                
+                // Display a default message if the follow-up content is very small (likely empty or whitespace)
+                if follow_up_content.trim().len() < 5 {
+                    debug_log("Received minimal follow-up response from LLM, displaying success message");
+                    println!("Project created successfully.");
+                }
                 
                 // Check for tool calls based on the validation result type
                 match &validation_result {
@@ -1080,6 +1165,18 @@ impl CliApp {
                         has_tool_call = objects.iter().any(|json| 
                             json.get("method").map_or(false, |m| m.as_str() == Some("mcp.tool_call"))
                         );
+                    },
+                    ValidationResult::InvalidFormat(content) => {
+                        // Handle empty or whitespace-only responses
+                        if content.trim().is_empty() {
+                            debug_log("Received empty or whitespace-only response");
+                            // Message already displayed above if content was minimal
+                            
+                            // Add an empty message to the conversation context
+                            self.context.add_assistant_message("");
+                            
+                            return Ok(String::new());
+                        }
                     },
                     _ => {}
                 }
@@ -1102,12 +1199,16 @@ impl CliApp {
                     // Recursively get another follow-up response
                     let recursive_response = self.get_streaming_follow_up_response().await?;
                     
-                    // Combine the responses
-                    let mut combined_response = follow_up_content;
-                    combined_response.push_str("\n\n");
-                    combined_response.push_str(&recursive_response);
+                    // Only combine responses if the recursive response is not empty
+                    if !recursive_response.is_empty() {
+                        let mut combined_response = follow_up_content;
+                        combined_response.push_str("\n\n");
+                        combined_response.push_str(&recursive_response);
+                        return Ok(combined_response);
+                    }
                     
-                    return Ok(combined_response);
+                    // Otherwise just return the current response
+                    return Ok(follow_up_content);
                 }
 
                 Ok(follow_up_content)

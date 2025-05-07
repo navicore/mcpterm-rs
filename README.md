@@ -1,3 +1,4 @@
+[![Dependabot Updates](https://github.com/navicore/mcpterm-rs/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/navicore/mcpterm-rs/actions/workflows/dependabot/dependabot-updates) [![Rust CI](https://github.com/navicore/mcpterm-rs/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/navicore/mcpterm-rs/actions/workflows/rust-ci.yml)
 # MCPTerm-RS
 
 A terminal-based client for the Model Context Protocol (MCP), written in Rust.
