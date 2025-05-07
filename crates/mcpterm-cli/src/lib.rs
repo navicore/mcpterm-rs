@@ -216,13 +216,31 @@ impl CliApp {
 
         // Check if the user needs to confirm the tool call
         if self.config.require_tool_confirmation && !self.config.auto_approve_tools {
-            print!("Allow tool execution: {} (y/n)? ", tool_id);
+            // Format the parameters for display
+            let params_str = match serde_json::to_string_pretty(&params) {
+                Ok(p) => p,
+                Err(_) => format!("{:?}", params),
+            };
+            
+            // Display tool type and parameters
+            println!("Allow tool execution: {}", tool_id);
+            println!("Parameters: {}", params_str);
+            print!("Approve? [Y/n] ");
             std::io::stdout().flush()?;
 
             let mut input = String::new();
             std::io::stdin().read_line(&mut input)?;
-
-            if !input.trim().to_lowercase().starts_with('y') {
+            
+            // If input is empty or starts with 'y' or 'Y', approve
+            let trimmed_input = input.trim().to_lowercase();
+            
+            // Debug log the input for troubleshooting
+            debug_log(&format!("User input for tool approval: '{}' (len: {})", 
+                             trimmed_input, trimmed_input.len()));
+            
+            // Only reject if the input is NOT empty AND does NOT start with 'y'
+            if !trimmed_input.is_empty() && !trimmed_input.starts_with('y') {
+                debug_log("User denied tool execution");
                 return Ok(ToolResult {
                     tool_id: tool_id.to_string(),
                     status: ToolStatus::Failure,
@@ -230,6 +248,8 @@ impl CliApp {
                     error: Some("Tool execution was denied by the user".to_string()),
                 });
             }
+            
+            debug_log("User approved tool execution (or used default approval)");
         }
 
         // Enable detailed logging of tools
