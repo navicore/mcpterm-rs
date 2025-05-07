@@ -66,6 +66,27 @@ impl LlmClient for MockLlmClient {
                 context.messages[context.messages.len() - 1].role,
                 mcp_core::context::MessageRole::Tool
             );
+            
+        // Check if this is a second-level follow-up (happens after a tool call and the first follow-up)
+        let is_second_follow_up = context.messages.len() >= 4 
+            && matches!(
+                context.messages[context.messages.len() - 2].role,
+                mcp_core::context::MessageRole::Tool
+            )
+            && matches!(
+                context.messages[context.messages.len() - 1].role,
+                mcp_core::context::MessageRole::User
+            )
+            && context.messages[context.messages.len() - 1].content.contains("continue");
+        
+        // For second-level follow-ups, return an empty response to avoid infinite recursion
+        if is_second_follow_up {
+            return Ok(LlmResponse {
+                id: "mock-empty-follow-up-id".to_string(),
+                content: String::new(), // Empty content to end the recursion
+                tool_calls: vec![], // No tool calls
+            });
+        }
 
         if is_follow_up_request && self.follow_up_response.is_some() {
             // This is a follow-up request after a tool call, use the follow-up response
@@ -85,20 +106,23 @@ impl LlmClient for MockLlmClient {
             .map(|m| m.content.clone())
             .unwrap_or_default();
 
+        // For follow-up responses, don't modify the text - use it directly
+        let response_content = if is_follow_up_request && self.follow_up_response.is_some() {
+            self.follow_up_response.as_ref().unwrap().clone()
+        } else {
+            format!("{} (responding to: {})", self.response_content, last_message)
+        };
+
         // Create response text, either as JSON-RPC or plain text
         let response_text = if self.use_jsonrpc_format {
             // Valid JSON-RPC format
             format!(
-                r#"{{"jsonrpc":"2.0","result":"{} (responding to: {})","id":"mock-response-id"}}"#,
-                self.response_content,
-                last_message.replace("\"", "\\\"")
+                r#"{{"jsonrpc":"2.0","result":"{}","id":"mock-response-id"}}"#,
+                response_content.replace("\"", "\\\"")
             )
         } else {
             // Plain text format for testing validation
-            format!(
-                "{} (responding to: {})",
-                self.response_content, last_message
-            )
+            response_content
         };
 
         // Create tool calls if requested
@@ -133,43 +157,65 @@ impl LlmClient for MockLlmClient {
                 mcp_core::context::MessageRole::Tool
             );
 
-        let response_text = if is_follow_up_request && self.follow_up_response.is_some() {
+        // Check if this is a second-level follow-up request (after a tool call and follow-up)
+        let is_second_follow_up = context.messages.len() >= 4 
+            && matches!(
+                context.messages[context.messages.len() - 2].role,
+                mcp_core::context::MessageRole::Tool
+            )
+            && matches!(
+                context.messages[context.messages.len() - 1].role,
+                mcp_core::context::MessageRole::User
+            )
+            && context.messages[context.messages.len() - 1].content.contains("continue");
+        
+        // For second-level follow-ups, return an empty response to avoid infinite recursion
+        if is_second_follow_up {
+            // Create an empty channel
+            let (tx, rx) = mpsc::channel::<Result<StreamChunk>>(1);
+            
+            // Send only a completion message with empty content
+            tokio::spawn(async move {
+                let final_chunk = StreamChunk {
+                    id: "mock-stream-chunk".to_string(),
+                    content: String::new(),
+                    is_tool_call: false,
+                    tool_call: None,
+                    is_complete: true,
+                };
+                
+                let _ = tx.send(Ok(final_chunk)).await;
+            });
+            
+            return Ok(Box::new(ReceiverStream::new(rx)));
+        }
+
+        // Extract the user's last message to include in the response
+        let last_message = context
+            .messages
+            .last()
+            .map(|m| m.content.clone())
+            .unwrap_or_default();
+
+        // First determine the raw content to use
+        let content = if is_follow_up_request && self.follow_up_response.is_some() {
             // Use the follow-up response for tool execution results
-            let follow_up = self.follow_up_response.as_ref().unwrap().clone();
-
-            if self.use_jsonrpc_format {
-                // Format as JSON-RPC
-                format!(
-                    r#"{{"jsonrpc":"2.0","result":"{}","id":"mock-follow-up-id"}}"#,
-                    follow_up.replace("\"", "\\\"")
-                )
-            } else {
-                // Plain text for testing validation
-                follow_up
-            }
+            self.follow_up_response.as_ref().unwrap().clone()
         } else {
-            // Extract the user's last message to include in the response
-            let last_message = context
-                .messages
-                .last()
-                .map(|m| m.content.clone())
-                .unwrap_or_default();
+            // Regular response with reference to the prompt
+            format!("{} (responding to: {})", self.response_content, last_message)
+        };
 
-            // Create response based on format setting
-            if self.use_jsonrpc_format {
-                // Valid JSON-RPC format
-                format!(
-                    r#"{{"jsonrpc":"2.0","result":"{} (responding to: {})","id":"mock-stream-id"}}"#,
-                    self.response_content,
-                    last_message.replace("\"", "\\\"")
-                )
-            } else {
-                // Plain text for testing validation
-                format!(
-                    "{} (responding to: {})",
-                    self.response_content, last_message
-                )
-            }
+        // Then format according to the format preference
+        let response_text = if self.use_jsonrpc_format {
+            // Format as JSON-RPC
+            format!(
+                r#"{{"jsonrpc":"2.0","result":"{}","id":"mock-stream-id"}}"#,
+                content.replace("\"", "\\\"")
+            )
+        } else {
+            // Plain text for testing validation
+            content
         };
 
         // Create a channel for the stream

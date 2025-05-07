@@ -251,9 +251,20 @@ pub async fn main() -> Result<()> {
                 let _response = app.run(&prompt).await?;
                 // Response is already printed in app.run
 
-                // Add a deliberate delay for tool responses
+                // Wait for any follow-up responses after tool execution
                 debug!("Waiting for any follow-up responses...");
-                sleep(Duration::from_secs(3)).await;
+                
+                // First wait for a longer time to give the LLM a chance to respond
+                sleep(Duration::from_secs(5)).await;
+                
+                // Check if there are any recent tool messages that might need follow-up
+                let has_recent_tools = app.has_recent_tool_messages();
+                
+                if has_recent_tools {
+                    debug!("Found recent tool executions, waiting longer for follow-up...");
+                    // If we've executed tools recently, wait longer for the LLM to process results
+                    sleep(Duration::from_secs(15)).await;
+                }
             }
 
             // Add some diagnostic logs to help debug tool response issues
@@ -288,7 +299,7 @@ pub async fn main() -> Result<()> {
 
                 // Add a deliberate delay for tool responses
                 debug!("Waiting for any follow-up responses...");
-                sleep(Duration::from_secs(3)).await;
+                sleep(Duration::from_secs(5)).await;
 
                 debug!(
                     "Context size after processing: {} messages",
@@ -351,8 +362,8 @@ async fn run_interactive_mode(app: &mut CliApp) -> Result<()> {
         // For all other input, send to the LLM
         match app.run(input).await {
             Ok(_) => {
-                // Add a short delay for tool responses in interactive mode
-                sleep(Duration::from_millis(500)).await;
+                // Add a delay for tool responses in interactive mode
+                sleep(Duration::from_secs(3)).await;
 
                 // Log context size and roles for debugging
                 debug!(

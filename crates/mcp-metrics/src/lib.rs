@@ -34,18 +34,21 @@ static GLOBAL_REGISTRY: OnceLock<MetricsRegistry> = OnceLock::new();
 impl MetricsRegistry {
     /// Get or initialize the global metrics registry
     pub fn global() -> &'static Self {
-        GLOBAL_REGISTRY.get_or_init(|| {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
+        GLOBAL_REGISTRY.get_or_init(|| Self::new())
+    }
+    
+    /// Create a new metrics registry (primarily for testing)
+    pub fn new() -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
 
-            MetricsRegistry {
-                counters: RwLock::new(HashMap::new()),
-                gauges: RwLock::new(HashMap::new()),
-                last_report_time: AtomicU64::new(now),
-            }
-        })
+        MetricsRegistry {
+            counters: RwLock::new(HashMap::new()),
+            gauges: RwLock::new(HashMap::new()),
+            last_report_time: AtomicU64::new(now),
+        }
     }
 
     /// Increment a counter by the specified amount (default 1)
@@ -227,83 +230,69 @@ mod tests {
 
     #[test]
     fn test_counter_increment() {
-        let registry = MetricsRegistry::global();
+        // Create a local registry instance for this test
+        let registry = MetricsRegistry::new();
+        let counter_name = "test.counter";
 
-        // Reset counters before test to ensure clean state
-        registry.reset_counters();
-
-        // Make sure counter starts at None (not present)
+        // Make sure counter starts empty
         let report = registry.generate_report();
-        assert_eq!(report.counters.get("test.counter"), None);
+        assert_eq!(report.counters.get(counter_name), None);
 
         // First increment: add 1
-        registry.increment("test.counter", 1);
+        registry.increment(counter_name, 1);
         let report = registry.generate_report();
-        assert_eq!(report.counters.get("test.counter"), Some(&1));
+        assert_eq!(report.counters.get(counter_name), Some(&1));
 
         // Second increment: add 2 more (for a total of 3)
-        registry.increment("test.counter", 2);
+        registry.increment(counter_name, 2);
         let report = registry.generate_report();
-        assert_eq!(report.counters.get("test.counter"), Some(&3));
+        assert_eq!(report.counters.get(counter_name), Some(&3));
     }
 
     #[test]
     fn test_gauge_set() {
-        let registry = MetricsRegistry::global();
+        // Create a local registry instance for this test
+        let registry = MetricsRegistry::new();
+        let gauge_name = "test.gauge";
 
-        // Reset counters and clear gauges
-        registry.reset_counters();
-        // Clear existing gauges by setting them to 0
-        let report = registry.generate_report();
-        report.gauges.iter().for_each(|(name, _)| {
-            registry.set_gauge(name, 0);
-        });
-
-        registry.set_gauge("test.gauge", 42);
+        registry.set_gauge(gauge_name, 42);
 
         let report = registry.generate_report();
-        assert_eq!(report.gauges.get("test.gauge"), Some(&42));
+        assert_eq!(report.gauges.get(gauge_name), Some(&42));
 
-        registry.set_gauge("test.gauge", 100);
+        registry.set_gauge(gauge_name, 100);
         let report = registry.generate_report();
-        assert_eq!(report.gauges.get("test.gauge"), Some(&100));
+        assert_eq!(report.gauges.get(gauge_name), Some(&100));
     }
 
     #[test]
     fn test_duration_recording() {
-        let registry = MetricsRegistry::global();
-
-        // Reset counters and clear gauges
-        registry.reset_counters();
-        // Clear existing gauges by setting them to 0
-        let report = registry.generate_report();
-        report.gauges.iter().for_each(|(name, _)| {
-            registry.set_gauge(name, 0);
-        });
+        // Create a local registry instance for this test
+        let registry = MetricsRegistry::new();
+        let duration_name = "test.duration";
 
         let duration = Duration::from_millis(123);
-        registry.record_duration("test.duration", duration);
+        registry.record_duration(duration_name, duration);
 
         let report = registry.generate_report();
-        assert_eq!(report.gauges.get("test.duration"), Some(&123));
+        assert_eq!(report.gauges.get(duration_name), Some(&123));
     }
 
     #[test]
     fn test_reset_counters() {
-        let registry = MetricsRegistry::global();
+        // Create a local registry instance for this test
+        let registry = MetricsRegistry::new();
+        let counter_name = "test.reset";
 
-        // Reset counters before test
-        registry.reset_counters();
-
-        registry.increment("test.reset", 5);
+        registry.increment(counter_name, 5);
 
         let report = registry.generate_report();
-        assert_eq!(report.counters.get("test.reset"), Some(&5));
+        assert_eq!(report.counters.get(counter_name), Some(&5));
 
         registry.reset_counters();
         let report = registry.generate_report();
         assert_eq!(
-            report.counters.get("test.reset"),
+            report.counters.get(counter_name),
             None,
             "Counter should be removed after reset"
         );
@@ -311,44 +300,37 @@ mod tests {
 
     #[test]
     fn test_macros() {
-        // Just create a simple test that's less complex to diagnose
+        // We need to use the global registry here since macros use it
         let registry = MetricsRegistry::global();
 
         // Make sure we start with clean state
         registry.reset_counters();
+        
+        // Use unique keys for this test to avoid collisions
+        let counter_name = "macro.test.unique";
+        let gauge_name = "macro.gauge.unique";
+        let timer_name = "macro.timer.unique";
 
-        // Verify the counter is not present
+        // Make sure the counter doesn't exist yet
+        registry.reset_counters();
+        
+        // Manually increment using the registry (not via macro)
+        registry.increment(counter_name, 3);
+        
+        // Check counter value
         let report = registry.generate_report();
-        assert_eq!(report.counters.get("macro.simple.test"), None);
+        assert_eq!(report.counters.get(counter_name), Some(&3));
 
-        // Use the macro to increment
-        let value_before = 0;
-        println!("Value before: {}", value_before);
+        // Test gauge macro with global registry
+        gauge!(gauge_name, 42);
 
-        // Increment directly not using the macro
-        registry.increment("macro.simple.test", 3);
-
-        // Check the value after direct increment
-        let report = registry.generate_report();
-        let value_after = report
-            .counters
-            .get("macro.simple.test")
-            .cloned()
-            .unwrap_or(0);
-        println!("Value after direct increment by 3: {}", value_after);
-        assert_eq!(value_after, 3);
-
-        // Now test a simple gauge
-        gauge!("macro.simple.gauge", 42);
-
-        // And a simple timer
-        let result = time!("macro.simple.timer", { "result" });
-
+        // Test timer macro with global registry
+        let result = time!(timer_name, { "result" });
         assert_eq!(result, "result");
 
         // Check gauge and timer values
         let report = registry.generate_report();
-        assert_eq!(report.gauges.get("macro.simple.gauge"), Some(&42));
-        assert!(report.gauges.contains_key("macro.simple.timer"));
+        assert_eq!(report.gauges.get(gauge_name), Some(&42));
+        assert!(report.gauges.contains_key(timer_name));
     }
 }
