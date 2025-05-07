@@ -127,21 +127,24 @@ pub fn create_correction_prompt(validation_result: &ValidationResult) -> String 
             String::new()
         }
         ValidationResult::MultipleJsonRpc(objects) => {
+            // We now support multiple JSON-RPC objects, but we should still encourage
+            // a more gradual approach where possible
             format!(
                 "Your last response contained multiple JSON-RPC objects ({}). \
-                According to the MCP protocol, you should respond with a single JSON-RPC object at a time. \
-                If you need to perform multiple actions, make one tool call at a time and wait for the result.
+                While our system can handle this, it's generally better to make one tool call at a time \
+                and wait for the result before proceeding with additional actions.
                 
-                Please reformat your response as a single JSON-RPC object. For your next response, choose ONE of:
-                
-                1. A text response using:
+                However, if you need to provide explanatory text to the user along with a tool call, \
+                you may use this format:
+
                 {{
                   \"jsonrpc\": \"2.0\",
-                  \"result\": \"Your message here...\",
-                  \"id\": \"response_id\"
+                  \"result\": \"Your explanatory message to the user here...\",
+                  \"id\": \"message_id\"
                 }}
-                
-                2. OR a single tool call using:
+
+                Followed by your tool call:
+
                 {{
                   \"jsonrpc\": \"2.0\",
                   \"method\": \"mcp.tool_call\",
@@ -152,7 +155,7 @@ pub fn create_correction_prompt(validation_result: &ValidationResult) -> String 
                   \"id\": \"tool_call_id\"
                 }}
                 
-                Please respond with just ONE JSON-RPC object.",
+                Please continue helping the user with their request.",
                 objects.len()
             )
         }
@@ -180,16 +183,24 @@ pub fn create_correction_prompt(validation_result: &ValidationResult) -> String 
             )
         }
         ValidationResult::Mixed { text, json_rpc } => {
+            // We now support mixed content better, but we should still encourage proper formatting
             format!(
-                "Your last response mixed regular text with JSON-RPC, which breaks the protocol. \
-                According to the MCP protocol, you should respond ONLY with a valid JSON-RPC object, \
-                not with a combination of text and JSON.
+                "Your last response mixed regular text with JSON-RPC. While our system can now handle this, \
+                it's better to format your responses properly for clarity and consistency.
+                
+                If you want to provide explanatory text to the user, please use the JSON-RPC result format:
+                
+                {{
+                  \"jsonrpc\": \"2.0\",
+                  \"result\": \"Your message to the user here...\",
+                  \"id\": \"message_id\"
+                }}
                 
                 Your text content was: {}
                 
                 {}
                 
-                Please respond ONLY with a valid JSON-RPC object for your ENTIRE message:",
+                Please continue helping the user with their request.",
                 if text.len() > 200 {
                     // Truncate long responses
                     format!("\"{}...\" (truncated)", &text[..200])
