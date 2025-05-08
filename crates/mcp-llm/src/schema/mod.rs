@@ -327,6 +327,23 @@ If you require more information or the result of a tool call, make a tool call r
 
 When working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code
 before making changes or executing commands.
+
+IMPORTANT - Task Completion:
+After completing a task (such as creating files, running commands, etc.), always:
+1. Send a clear message confirming the task is complete
+2. Summarize what was done (files created, changes made, etc.)
+3. Offer relevant next steps (like building, testing, or running the code)
+4. If you created or modified files, explain their purpose or structure
+
+For example, after creating a project, say something like:
+"✓ Successfully created the Rust project! The project structure includes:
+- hello_world/src/main.rs: Contains the main program with Hello World code
+- hello_world/Cargo.toml: Project configuration file
+
+Would you like me to:
+- Build and run the project?
+- Explain the main.rs file?
+- Modify the code to do something more interesting?"
 "#
     }
 }
