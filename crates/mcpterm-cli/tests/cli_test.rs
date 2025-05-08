@@ -1,16 +1,16 @@
 #[cfg(test)]
 mod tests {
     use mcpterm_cli::{mock::MockLlmClient, CliApp, CliConfig};
-    use tokio::sync::mpsc; // for creating channels
     use std::time::Duration;
+    use tokio::sync::mpsc; // for creating channels
 
     // Helper function to create a simple basic config with no streaming
     fn test_config() -> CliConfig {
         CliConfig {
-            streaming: false,    // Disable streaming for stability
-            enable_tools: true,  // Enable tools
+            streaming: false,                 // Disable streaming for stability
+            enable_tools: true,               // Enable tools
             require_tool_confirmation: false, // Auto approve tools
-            auto_approve_tools: true,        // Auto approve tools
+            auto_approve_tools: true,         // Auto approve tools
             ..Default::default()
         }
     }
@@ -34,7 +34,8 @@ mod tests {
             assert!(result.contains("jsonrpc"));
             assert!(result.contains("This is a mock LLM response"));
             assert!(result.contains("test prompt"));
-        }).await;
+        })
+        .await;
 
         // Make sure the test completed within the timeout
         assert!(result.is_ok(), "Test timed out");
@@ -46,9 +47,9 @@ mod tests {
         // Since we've fixed the production code to properly handle tool calls and
         // follow-up responses, we'll ignore this test for now. The real implementation
         // has been fixed, but the test mock would need more work to properly test it.
-        
+
         println!("This test is now ignored. See the actual CLI code for proper handling of tool calls and responses.");
-        
+
         // In a real PR, we'd want to fix the mocks to better simulate the actual behavior,
         // but since our focus was on fixing the CLI production code to properly display messages
         // to users, we've accomplished our goal.
@@ -80,7 +81,8 @@ mod tests {
             assert!(result.contains("jsonrpc"));
             assert!(result.contains("This is a streamed response"));
             assert!(result.contains("stream test"));
-        }).await;
+        })
+        .await;
 
         // Make sure the test completed within the timeout
         assert!(result.is_ok(), "Test timed out");
@@ -109,8 +111,11 @@ mod tests {
             let result = app.run("stream tool test").await.unwrap();
 
             // Verify the response contains the follow-up content
-            assert!(result.contains("This is the follow-up response after streaming tool execution"));
-        }).await;
+            assert!(
+                result.contains("This is the follow-up response after streaming tool execution")
+            );
+        })
+        .await;
 
         // Make sure the test completed within the timeout
         assert!(result.is_ok(), "Test timed out");

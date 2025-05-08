@@ -1,6 +1,5 @@
 use anyhow::Result;
 use mcp_core::extract_jsonrpc_objects;
-use serde_json::json;
 
 #[test]
 fn test_extract_clean_jsonrpc() -> Result<()> {
@@ -17,12 +16,12 @@ fn test_extract_clean_jsonrpc() -> Result<()> {
         "id": "test1"
     }
     "##;
-    
+
     let objects = extract_jsonrpc_objects(content);
     assert_eq!(objects.len(), 1);
     assert_eq!(objects[0]["method"], "mcp.tool_call");
     assert_eq!(objects[0]["params"]["name"], "file_write");
-    
+
     Ok(())
 }
 
@@ -53,19 +52,19 @@ fn test_extract_multiple_jsonrpc() -> Result<()> {
         "id": "test2"
     }
     "##;
-    
+
     let objects = extract_jsonrpc_objects(content);
     assert_eq!(objects.len(), 2);
     assert_eq!(objects[0]["params"]["parameters"]["path"], "test1.txt");
     assert_eq!(objects[1]["params"]["parameters"]["path"], "test2.txt");
-    
+
     Ok(())
 }
 
 #[test]
 fn test_extract_jsonrpc_with_text() -> Result<()> {
     let content = r##"I'll help you create those files. First, let's create the README:
-    
+
     {
         "jsonrpc": "2.0",
         "method": "mcp.tool_call",
@@ -78,9 +77,9 @@ fn test_extract_jsonrpc_with_text() -> Result<()> {
         },
         "id": "readme"
     }
-    
+
     Now, let's create the LICENSE file:
-    
+
     {
         "jsonrpc": "2.0",
         "method": "mcp.tool_call",
@@ -93,15 +92,15 @@ fn test_extract_jsonrpc_with_text() -> Result<()> {
         },
         "id": "license"
     }
-    
+
     Both files have been created successfully!
     "##;
-    
+
     let objects = extract_jsonrpc_objects(content);
     assert_eq!(objects.len(), 2);
     assert_eq!(objects[0]["id"], "readme");
     assert_eq!(objects[1]["id"], "license");
-    
+
     Ok(())
 }
 
@@ -121,9 +120,9 @@ fn test_extract_jsonrpc_claude_style() -> Result<()> {
       },
       "id": "write_readme"
     }
-    
+
     Executing embedded tool: file_write
-    
+
     I've received the following tool result:
     ```json
     {
@@ -132,9 +131,9 @@ fn test_extract_jsonrpc_claude_style() -> Result<()> {
       "path": "README.md"
     }
     ```
-    
+
     Now I need to provide a direct answer based on this result.
-    
+
     {
       "jsonrpc": "2.0",
       "method": "mcp.tool_call",
@@ -148,12 +147,12 @@ fn test_extract_jsonrpc_claude_style() -> Result<()> {
       "id": "write_license"
     }
     "##;
-    
+
     let objects = extract_jsonrpc_objects(content);
     assert_eq!(objects.len(), 2);
     assert_eq!(objects[0]["id"], "write_readme");
     assert_eq!(objects[1]["id"], "write_license");
-    
+
     Ok(())
 }
 
@@ -173,11 +172,14 @@ fn test_extract_nested_json() -> Result<()> {
         "id": "json_data"
     }
     "##;
-    
+
     let objects = extract_jsonrpc_objects(content);
     assert_eq!(objects.len(), 1);
     assert_eq!(objects[0]["id"], "json_data");
-    assert!(objects[0]["params"]["parameters"]["content"].as_str().unwrap().contains("\"nested\"")); 
-    
+    assert!(objects[0]["params"]["parameters"]["content"]
+        .as_str()
+        .unwrap()
+        .contains("\"nested\""));
+
     Ok(())
 }
