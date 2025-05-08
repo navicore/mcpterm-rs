@@ -36,7 +36,7 @@ impl MetricsRegistry {
     pub fn global() -> &'static Self {
         GLOBAL_REGISTRY.get_or_init(|| Self::new())
     }
-    
+
     /// Create a new metrics registry (primarily for testing)
     pub fn new() -> Self {
         let now = SystemTime::now()
@@ -305,7 +305,7 @@ mod tests {
 
         // Make sure we start with clean state
         registry.reset_counters();
-        
+
         // Use unique keys for this test to avoid collisions
         let counter_name = "macro.test.unique";
         let gauge_name = "macro.gauge.unique";
@@ -313,10 +313,10 @@ mod tests {
 
         // Make sure the counter doesn't exist yet
         registry.reset_counters();
-        
+
         // Manually increment using the registry (not via macro)
         registry.increment(counter_name, 3);
-        
+
         // Check counter value
         let report = registry.generate_report();
         assert_eq!(report.counters.get(counter_name), Some(&3));

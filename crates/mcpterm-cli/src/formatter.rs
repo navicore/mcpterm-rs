@@ -22,20 +22,20 @@ impl Colors {
 
     fn assistant() -> &'static str {
         if Self::supports_color() {
-            "\x1b[36m"  // Cyan for assistant responses
+            "\x1b[36m" // Cyan for assistant responses
         } else {
             ""
         }
     }
-    
+
     fn system() -> &'static str {
         if Self::supports_color() {
-            "\x1b[35m"  // Magenta for system messages
+            "\x1b[35m" // Magenta for system messages
         } else {
             ""
         }
     }
-    
+
     fn paint(color: &'static str, text: &str) -> String {
         format!("{}{}{}", color, text, Self::reset())
     }

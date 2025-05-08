@@ -253,13 +253,13 @@ pub async fn main() -> Result<()> {
 
                 // Wait for any follow-up responses after tool execution
                 debug!("Waiting for any follow-up responses...");
-                
+
                 // First wait for a longer time to give the LLM a chance to respond
                 sleep(Duration::from_secs(5)).await;
-                
+
                 // Check if there are any recent tool messages that might need follow-up
                 let has_recent_tools = app.has_recent_tool_messages();
-                
+
                 if has_recent_tools {
                     debug!("Found recent tool executions, waiting longer for follow-up...");
                     // If we've executed tools recently, wait longer for the LLM to process results

@@ -2,10 +2,10 @@ use serde_json::Value;
 use tracing::{debug, trace};
 
 /// Extract valid JSON-RPC objects from mixed content
-/// 
+///
 /// This function scans the input string for potential JSON objects,
 /// extracts them, and validates them as JSON-RPC objects.
-/// 
+///
 /// It handles cases where the input contains:
 /// - Multiple JSON-RPC objects
 /// - JSON-RPC objects embedded in natural language text
@@ -13,14 +13,17 @@ use tracing::{debug, trace};
 pub fn extract_jsonrpc_objects(content: &str) -> Vec<Value> {
     let mut objects = Vec::new();
     let mut start_index = 0;
-    
-    trace!("Extracting JSON-RPC objects from {} characters of content", content.len());
-    
+
+    trace!(
+        "Extracting JSON-RPC objects from {} characters of content",
+        content.len()
+    );
+
     while let Some(start) = content[start_index..].find('{') {
         let actual_start = start_index + start;
         let mut depth = 0;
         let mut end_index = None;
-        
+
         // Scan through the content to find the matching closing brace
         for (i, c) in content[actual_start..].char_indices() {
             match c {
@@ -35,10 +38,10 @@ pub fn extract_jsonrpc_objects(content: &str) -> Vec<Value> {
                 _ => {}
             }
         }
-        
+
         if let Some(end) = end_index {
             let potential_json = &content[actual_start..end];
-            
+
             // Try to parse as JSON
             match serde_json::from_str::<Value>(potential_json) {
                 Ok(json) => {
@@ -47,22 +50,28 @@ pub fn extract_jsonrpc_objects(content: &str) -> Vec<Value> {
                         trace!("Found valid JSON-RPC object: {}", potential_json);
                         objects.push(json);
                     } else {
-                        debug!("Found JSON object but not valid JSON-RPC: {}", potential_json);
+                        debug!(
+                            "Found JSON object but not valid JSON-RPC: {}",
+                            potential_json
+                        );
                     }
-                },
+                }
                 Err(e) => {
                     debug!("Found potential JSON object but failed to parse: {}", e);
                 }
             }
-            
+
             start_index = end;
         } else {
             // No matching closing brace found, exit
-            debug!("No matching closing brace found after position {}", actual_start);
+            debug!(
+                "No matching closing brace found after position {}",
+                actual_start
+            );
             break;
         }
     }
-    
+
     debug!("Extracted {} JSON-RPC objects", objects.len());
     objects
 }
@@ -73,31 +82,31 @@ fn is_valid_jsonrpc(json: &Value) -> bool {
     if !json.is_object() {
         return false;
     }
-    
+
     // Must have "jsonrpc": "2.0"
     if json.get("jsonrpc") != Some(&Value::String("2.0".to_string())) {
         return false;
     }
-    
+
     // Must have either a "method" or "result" or "error"
     let has_method = json.get("method").is_some();
     let has_result = json.get("result").is_some();
     let has_error = json.get("error").is_some();
-    
+
     if !has_method && !has_result && !has_error {
         return false;
     }
-    
+
     // If it has a method, it must have "params"
     if has_method && json.get("params").is_none() {
         return false;
     }
-    
+
     // Must have an "id"
     if json.get("id").is_none() {
         return false;
     }
-    
+
     true
 }
 
@@ -114,12 +123,12 @@ mod tests {
             "id": "test1"
         }
         "#;
-        
+
         let objects = extract_jsonrpc_objects(content);
         assert_eq!(objects.len(), 1);
         assert_eq!(objects[0]["method"], "mcp.tool_call");
     }
-    
+
     #[test]
     fn test_extract_multiple_jsonrpc() {
         let content = r#"{
@@ -135,13 +144,13 @@ mod tests {
             "id": "test2"
         }
         "#;
-        
+
         let objects = extract_jsonrpc_objects(content);
         assert_eq!(objects.len(), 2);
         assert_eq!(objects[0]["id"], "test1");
         assert_eq!(objects[1]["id"], "test2");
     }
-    
+
     #[test]
     fn test_extract_jsonrpc_with_natural_language() {
         let content = r#"I'll help you create those files.
@@ -166,11 +175,11 @@ mod tests {
         
         Both files have been created successfully.
         "#;
-        
+
         let objects = extract_jsonrpc_objects(content);
         assert_eq!(objects.len(), 2);
     }
-    
+
     #[test]
     fn test_ignore_invalid_json() {
         let content = r#"Here's some invalid JSON: { this is not valid }
@@ -184,11 +193,11 @@ mod tests {
             "id": "test1"
         }
         "#;
-        
+
         let objects = extract_jsonrpc_objects(content);
         assert_eq!(objects.len(), 1);
     }
-    
+
     #[test]
     fn test_ignore_non_jsonrpc_json() {
         let content = r#"Here's a valid JSON object that is not JSON-RPC:
@@ -204,11 +213,11 @@ mod tests {
             "id": "test1"
         }
         "#;
-        
+
         let objects = extract_jsonrpc_objects(content);
         assert_eq!(objects.len(), 1);
     }
-    
+
     #[test]
     fn test_nested_json_objects() {
         let content = r#"{
@@ -224,11 +233,11 @@ mod tests {
             "id": "test1"
         }
         "#;
-        
+
         let objects = extract_jsonrpc_objects(content);
         assert_eq!(objects.len(), 1);
     }
-    
+
     #[test]
     fn test_jsonrpc_embedded_in_claude_format() {
         let content = r#"I've received the following tool result:
@@ -255,7 +264,7 @@ mod tests {
           "id": "write_license"
         }
         "#;
-        
+
         let objects = extract_jsonrpc_objects(content);
         assert_eq!(objects.len(), 1);
         assert_eq!(objects[0]["id"], "write_license");
