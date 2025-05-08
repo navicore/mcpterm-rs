@@ -66,9 +66,9 @@ impl LlmClient for MockLlmClient {
                 context.messages[context.messages.len() - 1].role,
                 mcp_core::context::MessageRole::Tool
             );
-            
+
         // Check if this is a second-level follow-up (happens after a tool call and the first follow-up)
-        let is_second_follow_up = context.messages.len() >= 4 
+        let is_second_follow_up = context.messages.len() >= 4
             && matches!(
                 context.messages[context.messages.len() - 2].role,
                 mcp_core::context::MessageRole::Tool
@@ -77,14 +77,16 @@ impl LlmClient for MockLlmClient {
                 context.messages[context.messages.len() - 1].role,
                 mcp_core::context::MessageRole::User
             )
-            && context.messages[context.messages.len() - 1].content.contains("continue");
-        
+            && context.messages[context.messages.len() - 1]
+                .content
+                .contains("continue");
+
         // For second-level follow-ups, return an empty response to avoid infinite recursion
         if is_second_follow_up {
             return Ok(LlmResponse {
                 id: "mock-empty-follow-up-id".to_string(),
                 content: String::new(), // Empty content to end the recursion
-                tool_calls: vec![], // No tool calls
+                tool_calls: vec![],     // No tool calls
             });
         }
 
@@ -110,7 +112,10 @@ impl LlmClient for MockLlmClient {
         let response_content = if is_follow_up_request && self.follow_up_response.is_some() {
             self.follow_up_response.as_ref().unwrap().clone()
         } else {
-            format!("{} (responding to: {})", self.response_content, last_message)
+            format!(
+                "{} (responding to: {})",
+                self.response_content, last_message
+            )
         };
 
         // Create response text, either as JSON-RPC or plain text
@@ -158,7 +163,7 @@ impl LlmClient for MockLlmClient {
             );
 
         // Check if this is a second-level follow-up request (after a tool call and follow-up)
-        let is_second_follow_up = context.messages.len() >= 4 
+        let is_second_follow_up = context.messages.len() >= 4
             && matches!(
                 context.messages[context.messages.len() - 2].role,
                 mcp_core::context::MessageRole::Tool
@@ -167,13 +172,15 @@ impl LlmClient for MockLlmClient {
                 context.messages[context.messages.len() - 1].role,
                 mcp_core::context::MessageRole::User
             )
-            && context.messages[context.messages.len() - 1].content.contains("continue");
-        
+            && context.messages[context.messages.len() - 1]
+                .content
+                .contains("continue");
+
         // For second-level follow-ups, return an empty response to avoid infinite recursion
         if is_second_follow_up {
             // Create an empty channel
             let (tx, rx) = mpsc::channel::<Result<StreamChunk>>(1);
-            
+
             // Send only a completion message with empty content
             tokio::spawn(async move {
                 let final_chunk = StreamChunk {
@@ -183,10 +190,10 @@ impl LlmClient for MockLlmClient {
                     tool_call: None,
                     is_complete: true,
                 };
-                
+
                 let _ = tx.send(Ok(final_chunk)).await;
             });
-            
+
             return Ok(Box::new(ReceiverStream::new(rx)));
         }
 
@@ -203,7 +210,10 @@ impl LlmClient for MockLlmClient {
             self.follow_up_response.as_ref().unwrap().clone()
         } else {
             // Regular response with reference to the prompt
-            format!("{} (responding to: {})", self.response_content, last_message)
+            format!(
+                "{} (responding to: {})",
+                self.response_content, last_message
+            )
         };
 
         // Then format according to the format preference

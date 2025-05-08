@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod validation_tests {
     use anyhow::Result;
-    use mcp_core::context::MessageRole;
     use mcpterm_cli::{mock::MockLlmClient, CliApp, CliConfig};
 
     /// Helper function to create a mock client with an invalid response

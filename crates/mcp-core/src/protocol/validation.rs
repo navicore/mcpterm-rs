@@ -61,17 +61,17 @@ pub fn validate_llm_response(content: &str) -> ValidationResult {
     // Use our JSON-RPC extractor to find all JSON-RPC objects
     let json_objects = crate::jsonrpc::extract_jsonrpc_objects(trimmed);
     debug!("Extracted {} JSON-RPC objects", json_objects.len());
-    
+
     // If we found multiple JSON-RPC objects
     if json_objects.len() > 1 {
         debug!("Found {} valid JSON-RPC objects", json_objects.len());
         return ValidationResult::MultipleJsonRpc(json_objects);
     }
-    
+
     // If we found exactly one JSON-RPC object
     if json_objects.len() == 1 {
         let json_value = &json_objects[0];
-        
+
         // Check if the entire content is just this JSON object
         if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
             if parsed == *json_value {
@@ -79,10 +79,10 @@ pub fn validate_llm_response(content: &str) -> ValidationResult {
                 return ValidationResult::Valid(parsed);
             }
         }
-        
+
         // Otherwise, it's a mixed response with both text and JSON-RPC
         warn!("Response contains both text and valid JSON-RPC");
-        
+
         // Extract the text part - this is a bit tricky, let's find the JSON in the original text
         if let Some(json_start) = trimmed.find('{') {
             let text = trimmed[..json_start].trim().to_string();
@@ -98,13 +98,13 @@ pub fn validate_llm_response(content: &str) -> ValidationResult {
             };
         }
     }
-    
+
     // No JSON-RPC objects found, check if it's regular JSON
     if let Ok(json_value) = serde_json::from_str::<Value>(trimmed) {
         warn!("Response is JSON but not valid JSON-RPC");
         return ValidationResult::NotJsonRpc(json_value);
     }
-    
+
     // Check if it's a mixed response with invalid JSON
     if trimmed.contains('{') && trimmed.contains('}') {
         warn!("Response contains text mixed with invalid JSON");

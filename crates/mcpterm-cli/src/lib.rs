@@ -19,20 +19,11 @@ use std::io::Write;
 use std::sync::Arc;
 use tracing::{debug, error, trace};
 
-struct FormattedToolResult {
-    formatted_result: String,
-    original_result: ToolResult,
-}
-
-struct FollowUpResponse {
-    content: String,
-    is_empty_or_tool_call: bool,
-}
-
 pub mod cli_main;
 pub mod formatter;
 pub mod mock;
 
+#[derive(Default)]
 pub struct CliApp {
     context: ConversationContext,
     llm_client: Option<Arc<dyn LlmClient>>,
@@ -468,7 +459,7 @@ impl CliApp {
                         // If it's a tool call, it's already handled during streaming
                         if json
                             .get("method")
-                            .map_or(false, |m| m.as_str() == Some("mcp.tool_call"))
+                            .map_or_else(|| false, |m| m.as_str() == Some("mcp.tool_call"))
                         {
                             debug_log("Response contains a valid tool call");
                             // Let the streaming process handle it
@@ -1196,17 +1187,6 @@ impl CliApp {
         Ok(())
     }
 
-    // Function to get a corrected streaming response
-    async fn get_corrected_streaming_response(&mut self) -> Result<String> {
-        // Not implemented yet - stub to fix compilation
-        let client = self.llm_client.as_ref().unwrap();
-        let result = client.stream_message(&self.context).await;
-        match result {
-            Ok(mut stream) => self.process_streaming_response(&mut stream).await,
-            Err(e) => Err(anyhow!("Error getting corrected response: {}", e)),
-        }
-    }
-
     // Function to check for recent tool messages
     pub fn has_recent_tool_messages(&self) -> bool {
         // Scan the last few messages to see if any are tool messages
@@ -1221,8 +1201,8 @@ impl CliApp {
         let start_idx = messages.len() - check_count;
 
         // Look for any tool messages in the recent messages
-        for idx in start_idx..messages.len() {
-            if messages[idx].role == MessageRole::Tool {
+        for message in messages.iter().skip(start_idx) {
+            if message.role == MessageRole::Tool {
                 return true;
             }
         }
@@ -1373,23 +1353,24 @@ impl CliApp {
                 }
 
                 // Check for tool calls based on the validation result type
+                #[allow(clippy::collapsible_match)]
                 match &validation_result {
                     ValidationResult::Valid(json) => {
                         has_tool_call = json
                             .get("method")
-                            .map_or(false, |m| m.as_str() == Some("mcp.tool_call"));
+                            .is_some_and(|m| m.as_str() == Some("mcp.tool_call"));
                     }
                     ValidationResult::Mixed { json_rpc, .. } => {
                         if let Some(json) = json_rpc {
                             has_tool_call = json
                                 .get("method")
-                                .map_or(false, |m| m.as_str() == Some("mcp.tool_call"));
+                                .is_some_and(|m| m.as_str() == Some("mcp.tool_call"));
                         }
                     }
                     ValidationResult::MultipleJsonRpc(objects) => {
                         has_tool_call = objects.iter().any(|json| {
                             json.get("method")
-                                .map_or(false, |m| m.as_str() == Some("mcp.tool_call"))
+                                .is_some_and(|m| m.as_str() == Some("mcp.tool_call"))
                         });
                     }
                     ValidationResult::InvalidFormat(content) => {
