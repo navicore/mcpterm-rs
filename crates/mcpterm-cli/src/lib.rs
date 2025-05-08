@@ -1201,9 +1201,8 @@ impl CliApp {
         let start_idx = messages.len() - check_count;
 
         // Look for any tool messages in the recent messages
-        //for idx in start_idx..messages.len() {
-        for idx in start_idx..messages.len() {
-            if messages[idx].role == MessageRole::Tool {
+        for message in messages.iter().skip(start_idx) {
+            if message.role == MessageRole::Tool {
                 return true;
             }
         }
@@ -1354,23 +1353,24 @@ impl CliApp {
                 }
 
                 // Check for tool calls based on the validation result type
+                #[allow(clippy::collapsible_match)]
                 match &validation_result {
                     ValidationResult::Valid(json) => {
                         has_tool_call = json
                             .get("method")
-                            .map_or(false, |m| m.as_str() == Some("mcp.tool_call"));
+                            .is_some_and(|m| m.as_str() == Some("mcp.tool_call"));
                     }
                     ValidationResult::Mixed { json_rpc, .. } => {
                         if let Some(json) = json_rpc {
                             has_tool_call = json
                                 .get("method")
-                                .map_or(false, |m| m.as_str() == Some("mcp.tool_call"));
+                                .is_some_and(|m| m.as_str() == Some("mcp.tool_call"));
                         }
                     }
                     ValidationResult::MultipleJsonRpc(objects) => {
                         has_tool_call = objects.iter().any(|json| {
                             json.get("method")
-                                .map_or(false, |m| m.as_str() == Some("mcp.tool_call"))
+                                .is_some_and(|m| m.as_str() == Some("mcp.tool_call"))
                         });
                     }
                     ValidationResult::InvalidFormat(content) => {
