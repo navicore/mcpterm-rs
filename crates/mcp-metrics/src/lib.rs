@@ -5,6 +5,7 @@ use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Metrics Registry that maintains all counters and gauges
+#[derive(Default)]
 pub struct MetricsRegistry {
     counters: RwLock<HashMap<String, Arc<AtomicU64>>>,
     gauges: RwLock<HashMap<String, Arc<AtomicI64>>>,
@@ -34,7 +35,7 @@ static GLOBAL_REGISTRY: OnceLock<MetricsRegistry> = OnceLock::new();
 impl MetricsRegistry {
     /// Get or initialize the global metrics registry
     pub fn global() -> &'static Self {
-        GLOBAL_REGISTRY.get_or_init(|| Self::new())
+        GLOBAL_REGISTRY.get_or_init(Self::new)
     }
 
     /// Create a new metrics registry (primarily for testing)
