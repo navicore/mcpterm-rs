@@ -26,6 +26,6 @@ async fn main() -> Result<()> {
     } else {
         // No args and no piped stdin, launch TUI mode
         println!("Launching TUI mode...");
-        mcpterm_tui::App::new()?.run().await
+        mcpterm_tui::App::new()?.run()
     }
 }
