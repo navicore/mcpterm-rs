@@ -12,6 +12,7 @@ mcp-runtime = { path = "../mcp-runtime" }
 mcp-tools = { path = "../mcp-tools" }
 mcp-resources = { path = "../mcp-resources" }
 anyhow = { workspace = true }
+atty = "0.2"
 clap = { workspace = true }
 crossbeam-channel = { workspace = true }
 crossterm = { workspace = true }
@@ -25,3 +26,4 @@ tracing-subscriber = { workspace = true }
 arboard = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
+uuid = { version = "1.6", features = ["v4"] }
