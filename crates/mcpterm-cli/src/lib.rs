@@ -1694,7 +1694,9 @@ impl CliApp {
         // For testing environments, avoid infinite recursion by checking if we're too deep
         // in follow-up responses (indicated by many messages in the context)
         if self.context.messages.len() > 15 {
-            debug_log("Too many follow-up messages detected, ending recursion to prevent test hangs");
+            debug_log(
+                "Too many follow-up messages detected, ending recursion to prevent test hangs",
+            );
             return Ok(String::new());
         }
 
@@ -1736,7 +1738,9 @@ impl CliApp {
                             {
                                 is_tool_call = true;
                                 had_tool_call = true;
-                                debug_log("Follow-up contains a tool call, not displaying directly");
+                                debug_log(
+                                    "Follow-up contains a tool call, not displaying directly",
+                                );
                                 // Don't add to buffer to avoid printing JSON-RPC
                             } else {
                                 // Add to buffer for printing if not a tool call
