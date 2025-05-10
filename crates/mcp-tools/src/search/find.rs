@@ -397,7 +397,16 @@ impl Tool for FindTool {
         // Build include/exclude glob sets
         let include_glob = {
             let mut builder = GlobSetBuilder::new();
-            match Glob::new(pattern) {
+            // Modify pattern to be recursive if it doesn't start with ** and doesn't contain a path separator
+            let modified_pattern = if !pattern.starts_with("**") && !pattern.contains('/') && !pattern.contains('\\') {
+                format!("**/{}", pattern)
+            } else {
+                pattern.to_string()
+            };
+
+            info!("Using pattern: {}", modified_pattern);
+
+            match Glob::new(&modified_pattern) {
                 Ok(glob) => {
                     builder.add(glob);
                     builder.build().unwrap_or_else(|_| GlobSet::empty())

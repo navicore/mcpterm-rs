@@ -2270,6 +2270,7 @@ dependencies = [
  "mcp-resources",
  "mcp-runtime",
  "mcp-tools",
+ "regex",
  "serde",
  "serde_json",
  "tokio",

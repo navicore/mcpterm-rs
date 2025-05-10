@@ -1,3 +1,4 @@
+use crate::json_filter::JsonRpcFilter;
 use mcp_tools::{ToolResult, ToolStatus};
 use serde_json::{json, Value};
 use std::fmt::Write;
@@ -102,9 +103,26 @@ impl Colors {
 }
 
 /// Format tool results in a human-friendly way
-pub struct ResponseFormatter;
+pub struct ResponseFormatter {
+    /// JSON-RPC filter for removing tool calls from user-facing output
+    json_filter: JsonRpcFilter,
+}
+
+impl Default for ResponseFormatter {
+    fn default() -> Self {
+        Self {
+            json_filter: JsonRpcFilter::new(),
+        }
+    }
+}
 
 impl ResponseFormatter {
+    /// Format a message for display, removing any JSON-RPC tool calls
+    pub fn format_message(&self, message: &str) -> String {
+        // Filter out any JSON-RPC tool calls, especially focusing on patch tool calls
+        self.json_filter.filter_json_rpc(message)
+    }
+
     /// Format a tool result for user-friendly display
     pub fn format_tool_result(result: &ToolResult) -> String {
         let mut output = String::new();

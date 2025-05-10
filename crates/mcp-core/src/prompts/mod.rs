@@ -183,6 +183,41 @@ If you require more information or the result of a tool call, make a tool call r
 5. Consider security implications of commands before execution"#
                 .to_string(),
         );
+        
+        // Add a default tool prompt for patch
+        self.prompts.insert(
+            PromptType::Tool("patch".to_string()),
+            r#"When modifying files, prefer using the patch tool when:
+1. Making precise changes to a specific part of a file
+2. Applying multiple changes across different parts of a file
+3. Working with changes that depend on existing content/context
+4. Comparing file versions and applying differences
+
+To use the patch tool effectively:
+1. Specify the target_file path
+2. Provide a unified diff format with context in patch_content
+3. Include a few lines of context before and after the change
+4. CRITICAL: All newlines MUST be properly escaped as "\\n" in the patch_content
+5. CRITICAL: The JSON must be valid - no raw newlines, tabs, or control characters
+6. Use the format: @@ -line,count +line,count @@ followed by context lines (space prefix), removals (- prefix), and additions (+ prefix)
+
+Example valid patch call (note all newlines are escaped as \\n):
+{
+  "jsonrpc": "2.0",
+  "method": "mcp.tool_call",
+  "params": {
+    "name": "patch",
+    "parameters": {
+      "target_file": "example.txt",
+      "patch_content": "@@ -10,4 +10,5 @@\\n unchanged line\\n unchanged line\\n-line to remove\\n+line to add instead\\n unchanged line"
+    }
+  },
+  "id": "1"
+}
+
+NEVER include raw newlines, tabs, or other control characters in JSON. Always escape them properly."#
+                .to_string(),
+        );
     }
 
     /// Load all prompts from the base directory
