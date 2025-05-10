@@ -1,5 +1,5 @@
 use serde_json::Value;
-use tracing::{debug, trace};
+use tracing::debug;
 
 /// Special patch tool extractor to handle the issue with patch tool JSON-RPC validation
 /// This is a temporary workaround that specifically looks for patch tool calls
@@ -41,12 +41,12 @@ fn extract_patch_tool_call(content: &str) -> Option<Value> {
                 Some(Value::String(jsonrpc)),
                 Some(Value::String(method)),
                 Some(params),
-                Some(_)
+                Some(_),
             ) = (
                 json.get("jsonrpc"),
                 json.get("method"),
                 json.get("params"),
-                json.get("id")
+                json.get("id"),
             ) {
                 if jsonrpc == "2.0" && method == "mcp.tool_call" {
                     if let Some(Value::String(name)) = params.get("name") {
@@ -117,7 +117,12 @@ pub fn extract_jsonrpc_objects(content: &str) -> Vec<Value> {
             match serde_json::from_str::<Value>(potential_json) {
                 Ok(json) => {
                     // Check if this looks like a tool call (basic check to bypass the validation temporarily)
-                    let is_tool_call = match (json.get("jsonrpc"), json.get("method"), json.get("params"), json.get("id")) {
+                    let _is_tool_call = match (
+                        json.get("jsonrpc"),
+                        json.get("method"),
+                        json.get("params"),
+                        json.get("id"),
+                    ) {
                         (Some(jsonrpc), Some(method), Some(params), Some(_)) => {
                             if let (Value::String(v), Value::String(m)) = (jsonrpc, method) {
                                 if v == "2.0" && m == "mcp.tool_call" {
@@ -125,8 +130,8 @@ pub fn extract_jsonrpc_objects(content: &str) -> Vec<Value> {
                                         Some(Value::String(n)) if n == "patch" => {
                                             debug!("SPECIAL CASE: Treating patch tool call as valid: {}", potential_json);
                                             return vec![json.clone()]; // Force return the patch tool call
-                                        },
-                                        _ => false
+                                        }
+                                        _ => false,
                                     }
                                 } else {
                                     false
@@ -134,8 +139,8 @@ pub fn extract_jsonrpc_objects(content: &str) -> Vec<Value> {
                             } else {
                                 false
                             }
-                        },
-                        _ => false
+                        }
+                        _ => false,
                     };
 
                     // Regular validation
@@ -184,9 +189,12 @@ fn is_valid_jsonrpc(json: &Value) -> bool {
     match jsonrpc_version {
         Some(Value::String(version)) if version == "2.0" => {
             // Valid version
-        },
+        }
         _ => {
-            debug!("JSON-RPC validation failed: jsonrpc != \"2.0\", found: {:?}", jsonrpc_version);
+            debug!(
+                "JSON-RPC validation failed: jsonrpc != \"2.0\", found: {:?}",
+                jsonrpc_version
+            );
             return false;
         }
     }
@@ -276,25 +284,25 @@ mod tests {
     #[test]
     fn test_extract_jsonrpc_with_natural_language() {
         let content = r#"I'll help you create those files.
-        
+
         Here's the first file:
-        
+
         {
             "jsonrpc": "2.0",
             "method": "mcp.tool_call",
             "params": {"name": "file_write", "parameters": {"path": "test.txt", "content": "hello"}},
             "id": "test1"
         }
-        
+
         And now let's create the second file:
-        
+
         {
             "jsonrpc": "2.0",
             "method": "mcp.tool_call",
             "params": {"name": "file_write", "parameters": {"path": "test2.txt", "content": "world"}},
             "id": "test2"
         }
-        
+
         Both files have been created successfully.
         "#;
 
@@ -305,9 +313,9 @@ mod tests {
     #[test]
     fn test_ignore_invalid_json() {
         let content = r#"Here's some invalid JSON: { this is not valid }
-        
+
         But here's a valid JSON-RPC object:
-        
+
         {
             "jsonrpc": "2.0",
             "method": "mcp.tool_call",
@@ -323,11 +331,11 @@ mod tests {
     #[test]
     fn test_ignore_non_jsonrpc_json() {
         let content = r#"Here's a valid JSON object that is not JSON-RPC:
-        
+
         {"name": "test", "value": 123}
-        
+
         And here's a valid JSON-RPC object:
-        
+
         {
             "jsonrpc": "2.0",
             "method": "mcp.tool_call",
@@ -346,9 +354,9 @@ mod tests {
             "jsonrpc": "2.0",
             "method": "mcp.tool_call",
             "params": {
-                "name": "file_write", 
+                "name": "file_write",
                 "parameters": {
-                    "path": "test.txt", 
+                    "path": "test.txt",
                     "content": "{ \"nested\": true, \"data\": { \"more\": [1, 2, 3] } }"
                 }
             },
@@ -370,9 +378,9 @@ mod tests {
           "path": "README.md"
         }
         ```
-        
+
         Now I need to provide a direct answer based on this result.
-        
+
         {
           "jsonrpc": "2.0",
           "method": "mcp.tool_call",
