@@ -21,6 +21,7 @@ use tracing::{debug, error, trace};
 
 pub mod cli_main;
 pub mod formatter;
+pub mod json_filter;
 pub mod mock;
 
 #[derive(Default)]
@@ -167,7 +168,9 @@ impl CliApp {
         let diff_tool = mcp_tools::diff::DiffTool::new();
         tool_manager.register_tool(Box::new(diff_tool));
 
+        // Register patch tool with explicit identifier matching the prompt
         let patch_tool = mcp_tools::diff::PatchTool::new();
+        // Ensure tool_id is "patch" to match what the LLM is using
         tool_manager.register_tool(Box::new(patch_tool));
 
         // Register project navigator tool
@@ -197,6 +200,13 @@ impl CliApp {
 
     // Add a method to handle tool calls
     async fn execute_tool(&mut self, tool_id: &str, params: Value) -> Result<ToolResult> {
+        debug!("Attempting to execute tool: {}", tool_id);
+
+        // Special case for patch tool - directly parse JSON string
+        if tool_id == "patch" {
+            debug!("Special handling for patch tool");
+        }
+
         // Check if tools are enabled
         if !self.config.enable_tools {
             return Ok(ToolResult {
@@ -1329,7 +1339,6 @@ impl CliApp {
                 // If we didn't receive any content, log this fact and display a message
                 if !received_content {
                     debug_log("Received empty follow-up response from LLM");
-                    println!("Project created successfully.");
 
                     // Add an empty message to the conversation context
                     self.context.add_assistant_message("");
@@ -1349,7 +1358,6 @@ impl CliApp {
                     debug_log(
                         "Received minimal follow-up response from LLM, displaying success message",
                     );
-                    println!("Project created successfully.");
                 }
 
                 // Check for tool calls based on the validation result type

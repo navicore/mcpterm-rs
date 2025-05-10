@@ -493,3 +493,74 @@ async fn test_find_tool_include_directories() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_find_tool_exact_filename_search() -> Result<()> {
+    // Create a temporary directory for our test files
+    let temp_dir = tempdir()?;
+    let test_dir = PathBuf::from(temp_dir.path());
+
+    // Create a nested directory structure
+    let subdir1 = test_dir.join("project");
+    fs::create_dir(&subdir1)?;
+
+    let subdir2 = subdir1.join("src");
+    fs::create_dir(&subdir2)?;
+
+    // Create files in different directories
+    create_test_file(&test_dir, "readme.md", "Root readme")?;
+    create_test_file(&subdir1, "config.json", "Project config")?;
+    create_test_file(&subdir2, "main.go", "package main\n\nfunc main() {}")?;
+
+    // Create the find tool with custom config that allows the temp directory
+    let temp_path_str = temp_dir.path().to_string_lossy().to_string();
+
+    // Create a config that allows the temp directory and has NO denied paths
+    let config = FindConfig {
+        allowed_paths: Some(vec![temp_path_str]),
+        denied_paths: None, // Override the default denied paths
+        max_files: 1000,
+        default_max_depth: 10,
+    };
+    let find_tool = FindTool::with_config(config);
+
+    // Test search with exact filename - this should find the file in the nested directory
+    let params = json!({
+        "pattern": "main.go",
+        "base_dir": temp_dir.path().to_string_lossy().to_string()
+    });
+
+    let result = find_tool.execute(params).await?;
+
+    // Print detailed error information
+    if result.status != ToolStatus::Success {
+        println!("Test failed with error: {:?}", result.error);
+        println!("Result output: {:?}", result.output);
+    }
+
+    // Verify the result
+    assert_eq!(result.status, ToolStatus::Success);
+
+    // Get the files from the output
+    let files = result.output["files"].as_array().unwrap();
+
+    // Should have found 1 file, the main.go file deep in the directory structure
+    assert_eq!(
+        files.len(),
+        1,
+        "Should find exactly one file matching 'main.go'"
+    );
+
+    // The file found should be the main.go file
+    let found_path = files[0]["path"].as_str().unwrap();
+    assert!(
+        found_path.contains("main.go"),
+        "The found file should be main.go"
+    );
+    assert!(
+        found_path.contains("src"),
+        "The file should be in the src directory"
+    );
+
+    Ok(())
+}
