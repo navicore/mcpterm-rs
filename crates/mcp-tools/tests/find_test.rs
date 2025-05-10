@@ -545,12 +545,22 @@ async fn test_find_tool_exact_filename_search() -> Result<()> {
     let files = result.output["files"].as_array().unwrap();
 
     // Should have found 1 file, the main.go file deep in the directory structure
-    assert_eq!(files.len(), 1, "Should find exactly one file matching 'main.go'");
+    assert_eq!(
+        files.len(),
+        1,
+        "Should find exactly one file matching 'main.go'"
+    );
 
     // The file found should be the main.go file
     let found_path = files[0]["path"].as_str().unwrap();
-    assert!(found_path.contains("main.go"), "The found file should be main.go");
-    assert!(found_path.contains("src"), "The file should be in the src directory");
+    assert!(
+        found_path.contains("main.go"),
+        "The found file should be main.go"
+    );
+    assert!(
+        found_path.contains("src"),
+        "The file should be in the src directory"
+    );
 
     Ok(())
 }
