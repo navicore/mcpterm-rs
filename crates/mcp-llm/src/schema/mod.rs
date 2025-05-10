@@ -184,7 +184,8 @@ impl McpSchemaManager {
 
     /// Get the system prompt addition that instructs the LLM to use MCP with custom tool documentation
     pub fn get_mcp_system_prompt_with_tools(&self, tools_doc: &str) -> String {
-        self.prompt_manager.get_mcp_system_prompt_with_tools(tools_doc)
+        self.prompt_manager
+            .get_mcp_system_prompt_with_tools(tools_doc)
     }
 
     /// Get the system prompt addition that instructs the LLM to use MCP

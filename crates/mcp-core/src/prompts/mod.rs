@@ -141,7 +141,8 @@ You can assist with:
 - Suggesting improvements and optimizations
 
 When helping the user, prefer to search and understand their code before making changes.
-"#.to_string(),
+"#
+            .to_string(),
         );
 
         // Add default MCP system prompt (previously in McpSchemaManager)
@@ -455,7 +456,9 @@ NEVER include raw newlines, tabs, or other control characters in JSON. Always es
 
     /// Get the MCP system prompt with custom tool documentation
     pub fn get_mcp_system_prompt_with_tools(&self, tools_doc: &str) -> String {
-        let template = self.get_prompt(&PromptType::McpSystemWithTools).unwrap_or_default();
+        let template = self
+            .get_prompt(&PromptType::McpSystemWithTools)
+            .unwrap_or_default();
         let engine = TemplateEngine::new().with_var("tool_documentation", tools_doc);
         engine.render(template)
     }
