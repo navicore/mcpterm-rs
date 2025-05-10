@@ -295,7 +295,6 @@ impl BedrockClient {
             "Using system prompt with {} characters",
             system_prompt.len()
         );
-        trace!("System prompt content: {}", system_prompt);
 
         // Convert conversation messages to Claude format
         for message in &context.messages {
@@ -306,21 +305,10 @@ impl BedrockClient {
                 MessageRole::System => continue,
                 // Tool results require special handling for Claude
                 MessageRole::Tool => {
-                    trace!(
-                        "Converting tool message to specialized assistant message: {}",
-                        message.content
-                    );
-
                     // Parse the tool message if it's in JSON-RPC format
                     if let Ok(json_value) =
                         serde_json::from_str::<serde_json::Value>(&message.content)
                     {
-                        // First, log the raw tool result at trace level
-                        trace!(
-                            "Tool result JSON: {}",
-                            serde_json::to_string_pretty(&json_value).unwrap_or_default()
-                        );
-
                         // Check if it has the JSON-RPC result field
                         if let Some(result) = json_value.get("result") {
                             // Format as a special tool result message for Claude
@@ -328,8 +316,6 @@ impl BedrockClient {
                                 "I've received the following tool result:\n```json\n{}\n```\n\nNow I need to provide a direct answer based on this result.",
                                 serde_json::to_string_pretty(result).unwrap_or_else(|_| result.to_string())
                             );
-
-                            trace!("Created specialized tool result message: {}", tool_msg);
 
                             let content = ClaudeContent {
                                 content_type: "text".to_string(),
@@ -400,8 +386,6 @@ impl BedrockClient {
                             // Otherwise stringify it, preserving formatting
                             result.to_string()
                         };
-
-                        trace!("Extracted result content from MCP response: {}", content);
 
                         Ok(LlmResponse {
                             id: response.id.clone(),
@@ -502,21 +486,11 @@ impl LlmClient for BedrockClient {
             String::from_utf8_lossy(&payload_bytes)
         );
 
-        // Log detailed request JSON at TRACE level (only shown with LOG_LEVEL=trace)
+        // Only log the raw request at TRACE level, keeping just this critical logging point
         trace!(
             ">>> RAW REQUEST TO LLM >>>\n{}",
             serde_json::to_string_pretty(&claude_payload).unwrap_or_default()
         );
-
-        // Log the message history being sent to Claude for each role
-        for (i, msg) in claude_payload.messages.iter().enumerate() {
-            trace!(
-                "Message[{}] role={}, content={}",
-                i,
-                msg.role,
-                serde_json::to_string_pretty(&msg.content).unwrap_or_default()
-            );
-        }
 
         // Send the request to Bedrock with timing
         // For tests, we skip the actual API call
@@ -586,12 +560,6 @@ impl LlmClient for BedrockClient {
                 debug!(
                     "Successfully parsed Claude response: {:?}",
                     claude_response.id
-                );
-
-                // Log structured parsed response at TRACE level
-                trace!(
-                    "Parsed Claude response structure: {}",
-                    serde_json::to_string_pretty(&claude_response).unwrap_or_default()
                 );
 
                 let response = self.parse_claude_response(&claude_response)?;
@@ -682,21 +650,11 @@ impl LlmClient for BedrockClient {
             String::from_utf8_lossy(&payload_bytes)
         );
 
-        // Log detailed request JSON at TRACE level (only shown with LOG_LEVEL=trace)
+        // Only log the raw request at TRACE level, keeping just this critical logging point
         trace!(
-            "Raw streaming JSON request payload to Bedrock: {}",
+            ">>> RAW STREAMING REQUEST TO LLM >>>\n{}",
             serde_json::to_string_pretty(&claude_payload).unwrap_or_default()
         );
-
-        // Log the message history being sent to Claude for each role
-        for (i, msg) in claude_payload.messages.iter().enumerate() {
-            trace!(
-                "Streaming Message[{}] role={}, content={}",
-                i,
-                msg.role,
-                serde_json::to_string_pretty(&msg.content).unwrap_or_default()
-            );
-        }
 
         // Create a channel for the stream
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<StreamChunk>>(100);
@@ -781,7 +739,7 @@ impl LlmClient for BedrockClient {
             let response_bytes = output.body;
             let response_str = String::from_utf8_lossy(response_bytes.as_ref()).to_string();
             // Log full raw response at TRACE level (only shown with LOG_LEVEL=trace)
-            trace!("Raw JSON streaming response from Bedrock: {}", response_str);
+            trace!("<<< RAW STREAMING RESPONSE FROM LLM <<<\n{}", response_str);
 
             // Check if request was cancelled
             {
@@ -800,12 +758,6 @@ impl LlmClient for BedrockClient {
                     debug!(
                         "Successfully parsed Claude response: {:?}",
                         claude_response.id
-                    );
-
-                    // Log structured parsed response at TRACE level
-                    trace!(
-                        "Parsed Claude streaming response structure: {}",
-                        serde_json::to_string_pretty(&claude_response).unwrap_or_default()
                     );
 
                     // Get the text content from Claude

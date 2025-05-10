@@ -10,4 +10,6 @@ A list of reminders for future feature work
   * [ ] DEBUG should print tool json in and out
 * [ ] ascii art diagramming of TRACE
 * [ ] code analysis tools via jsonrpc tools
+* [ ] easter egg - like action prompts
+* [ ] deep easter eggs
 

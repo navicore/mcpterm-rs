@@ -17,7 +17,7 @@ use serde_json::Value;
 use std::fmt::Display;
 use std::io::Write;
 use std::sync::Arc;
-use tracing::{debug, error, trace};
+use tracing::{debug, error};
 
 pub mod cli_main;
 pub mod formatter;
@@ -394,7 +394,6 @@ impl CliApp {
                 "Generated tool documentation with {} characters",
                 tools_doc.len()
             ));
-            trace!("Tool documentation: {}", tools_doc);
 
             // Create client with tool documentation
             match BedrockClient::with_tool_documentation(bedrock_config, tools_doc).await {

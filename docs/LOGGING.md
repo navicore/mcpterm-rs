@@ -28,10 +28,19 @@ The application respects the standard `LOG_LEVEL` environment variable to contro
 
 ### To see LLM API requests and responses
 
-To see the raw JSON sent to and received from the LLM API, use the `trace` log level:
+To see the raw JSON sent to and received from the LLM API, use the `trace` log level. We carefully maintain only two key trace points for LLM messages:
+
+1. `>>> RAW REQUEST TO LLM >>>` - Shows the exact JSON payload sent to the LLM
+2. `<<< RAW RESPONSE FROM LLM <<<` - Shows the exact JSON response received
 
 ```bash
 LOG_LEVEL=trace mcpterm-cli "Your prompt"
+```
+
+You can extract just these critical messages with:
+
+```bash
+tail -f /tmp/mcpterm.log | grep -E "(>>> RAW REQUEST|<<< RAW RESPONSE)"
 ```
 
 ### Intelligent Dependency Log Filtering
@@ -94,7 +103,14 @@ tail -f /tmp/mcpterm.log
 For watching only relevant sections of high-volume logs, you might use `grep`:
 
 ```bash
-tail -f /tmp/mcpterm.log | grep "Raw JSON"
+# Extract just the LLM API request/response messages
+tail -f /tmp/mcpterm.log | grep -E "(>>> RAW REQUEST|<<< RAW RESPONSE)"
+
+# Filter for any debug or higher messages from the llm module
+tail -f /tmp/mcpterm.log | grep "mcp_llm"
+
+# Watch for validation failures
+tail -f /tmp/mcpterm.log | grep "validation failed"
 ```
 
 ## Troubleshooting Logging
