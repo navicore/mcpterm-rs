@@ -47,7 +47,11 @@ pub fn render_with_editors(
 
 fn render_messages(f: &mut ratatui::Frame, state: &mut AppState, area: Rect) {
     // Create a block with borders
-    let title = "Messages".to_string();
+    let auto_scroll_status = if state.auto_scroll { "AUTO" } else { "MANUAL" };
+    let title = format!("Messages (scroll: {}/{} - {})", 
+                      state.messages_scroll,
+                      state.messages.len().saturating_sub(1),
+                      auto_scroll_status);
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
@@ -98,7 +102,11 @@ fn render_messages(f: &mut ratatui::Frame, state: &mut AppState, area: Rect) {
 
 fn render_messages_with_viewer(f: &mut ratatui::Frame, state: &mut AppState, area: Rect, message_viewer: &mut MessageViewer) {
     // Create a block with borders
-    let title = "Messages".to_string();
+    let auto_scroll_status = if state.auto_scroll { "AUTO" } else { "MANUAL" };
+    let title = format!("Messages (scroll: {}/{} - {})", 
+                      state.messages_scroll,
+                      state.messages.len().saturating_sub(1),
+                      auto_scroll_status);
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)

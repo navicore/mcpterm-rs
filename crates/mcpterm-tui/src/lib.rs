@@ -2,6 +2,7 @@ pub mod events;
 pub mod state;
 pub mod ui;
 pub mod direct_impl;
+pub mod clean_impl;
 
 use anyhow::Result;
 use crossterm::{
@@ -142,6 +143,15 @@ impl App {
                                         self.state.messages_scroll += 1;
                                         info!("  Scrolled messages up, offset: {}", self.state.messages_scroll);
                                     }
+                                    ViewerHandleResult::Continue
+                                },
+                                crossterm::event::KeyCode::Char('a') => {
+                                    info!("  Message viewer: 'a' key - toggle auto-scroll");
+                                    self.state.toggle_auto_scroll();
+                                    self.state.add_message(
+                                        format!("Auto-scroll {}", if self.state.auto_scroll { "enabled" } else { "disabled" }),
+                                        MessageType::System,
+                                    );
                                     ViewerHandleResult::Continue
                                 },
                                 // Other message viewer keys

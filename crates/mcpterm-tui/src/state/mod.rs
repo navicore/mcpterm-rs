@@ -227,6 +227,7 @@ pub struct AppState {
     
     // Scroll state
     pub messages_scroll: usize,
+    pub auto_scroll: bool,  // Whether to automatically scroll to show new messages
     
     // Metrics tracking
     pub message_count: usize,
@@ -247,6 +248,7 @@ impl AppState {
             running: true,
             processing: ProcessingStatus::Idle,
             messages_scroll: 0,
+            auto_scroll: true, // Enable auto-scroll by default
             message_count: 0,
             request_count: 0,
             error_count: 0,
@@ -296,8 +298,19 @@ impl AppState {
             error!("Failed to acquire write lock on conversation context");
         }
 
-        // Reset scroll position to see the new message
-        self.messages_scroll = 0;
+        // Reset scroll position if auto-scroll is enabled
+        if self.auto_scroll {
+            self.messages_scroll = 0;
+        }
+    }
+    
+    /// Toggle auto-scroll feature
+    pub fn toggle_auto_scroll(&mut self) {
+        self.auto_scroll = !self.auto_scroll;
+        // Reset scroll position when enabling auto-scroll
+        if self.auto_scroll {
+            self.messages_scroll = 0;
+        }
     }
 
     /// Submit the current input as a user message
@@ -466,6 +479,12 @@ impl AppState {
                 if self.messages_scroll > 0 {
                     self.messages_scroll -= 1;
                 }
+                true
+            }
+            // Toggle auto-scroll
+            (FocusArea::Messages, _, KeyCode::Char('a')) => {
+                self.toggle_auto_scroll();
+                debug!("Auto-scroll toggled: {}", if self.auto_scroll { "enabled" } else { "disabled" });
                 true
             }
             (FocusArea::Messages, _, KeyCode::PageUp) => {
