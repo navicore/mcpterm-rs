@@ -1,6 +1,6 @@
+use regex::Regex;
 use serde_json::Value;
 use tracing::debug;
-use regex::Regex;
 
 /// Filters JSON-RPC tool call messages from user-facing output
 pub struct JsonRpcFilter {
@@ -25,19 +25,19 @@ impl JsonRpcFilter {
         }
 
         // Special case for the tests
-        
+
         // First test case: valid JSON with escaped newlines
         let valid_test_pattern = r#"I'll help modify that file.
 
 {"jsonrpc":"2.0","method":"mcp.tool_call","params":{"name":"patch","parameters":{"target_file":"test1.py","patch_content":"@@ -1,2 +1,2 @@\\n print(\"hello\")\\n-print(\"world\")\\n+print(\"universe\")\\n"}},"id":"1"}
 
 Let me know if you need any other changes."#;
-        
+
         if content == valid_test_pattern {
             debug!("Matched test case valid JSON exactly");
             return "I'll help modify that file.\n\n[Detected patch tool call - processing...]\n\nLet me know if you need any other changes.".to_string();
         }
-        
+
         // Second test case: invalid JSON with unescaped newlines
         let invalid_test_pattern = r#"I'll help modify that file.
 
@@ -48,27 +48,30 @@ Let me know if you need any other changes."#;
 "}},"id":"1"}
 
 Let me know if you need any other changes."#;
-        
+
         if content == invalid_test_pattern {
             debug!("Matched test case invalid JSON exactly");
             return "I'll help modify that file.\n\n[Invalid patch tool JSON detected - Please check format and try again]\n\nLet me know if you need any other changes.".to_string();
         }
-        
+
         // General case logic - only if not one of the test patterns
         let mut filtered_content = content.to_string();
         let mut start_idx = 0;
-        
+
         // Find potential JSON objects
-        while let Some(match_info) = self.json_object_pattern.find_at(&filtered_content, start_idx) {
+        while let Some(match_info) = self
+            .json_object_pattern
+            .find_at(&filtered_content, start_idx)
+        {
             let matched_str = match_info.as_str();
             let start = match_info.start();
             let end = match_info.end();
-            
+
             // Look for patch tool indicators
-            if matched_str.contains("jsonrpc") && 
-               matched_str.contains("method") && 
-               matched_str.contains("patch") {
-                
+            if matched_str.contains("jsonrpc")
+                && matched_str.contains("method")
+                && matched_str.contains("patch")
+            {
                 // Try to parse as JSON
                 match serde_json::from_str::<Value>(matched_str) {
                     Ok(json) => {
@@ -91,11 +94,11 @@ Let me know if you need any other changes."#;
                     }
                 }
             }
-            
+
             // Move to right after this match
             start_idx = end;
         }
-        
+
         filtered_content
     }
 
@@ -130,7 +133,7 @@ mod tests {
     #[test]
     fn test_filter_patch_tool_call() {
         let filter = JsonRpcFilter::new();
-        
+
         // Valid patch tool call
         let input = r#"I'll help modify that file.
 
@@ -141,7 +144,7 @@ Let me know if you need any other changes."#;
         let result = filter.filter_json_rpc(input);
         assert!(!result.contains("jsonrpc"));
         assert!(result.contains("[Detected patch tool call - processing...]"));
-        
+
         // Invalid JSON with patch signature
         let invalid_input = r#"I'll help modify that file.
 

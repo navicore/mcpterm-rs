@@ -183,7 +183,7 @@ If you require more information or the result of a tool call, make a tool call r
 5. Consider security implications of commands before execution"#
                 .to_string(),
         );
-        
+
         // Add a default tool prompt for patch
         self.prompts.insert(
             PromptType::Tool("patch".to_string()),
