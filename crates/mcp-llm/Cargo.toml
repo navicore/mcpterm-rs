@@ -15,7 +15,7 @@ aws-smithy-runtime-api = { workspace = true }
 aws-smithy-types = { workspace = true }
 bytes = "1.5.0"
 futures = { workspace = true }
-jsonschema = "0.17.1"
+jsonschema = "0.30.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
