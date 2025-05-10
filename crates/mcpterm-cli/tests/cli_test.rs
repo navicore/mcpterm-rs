@@ -2,7 +2,6 @@
 mod tests {
     use mcpterm_cli::{mock::MockLlmClient, CliApp, CliConfig};
     use std::time::Duration;
-    use tokio::sync::mpsc; // for creating channels
 
     // Helper function to create a simple basic config with no streaming
     fn test_config() -> CliConfig {
