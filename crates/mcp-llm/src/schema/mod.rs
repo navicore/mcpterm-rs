@@ -1,5 +1,6 @@
 use anyhow::Result;
 use jsonschema::{Draft, JSONSchema};
+use mcp_core::prompts::PromptManager;
 use serde_json::json;
 use thiserror::Error;
 
@@ -17,6 +18,7 @@ pub struct McpSchemaManager {
     request_schema: JSONSchema,
     response_schema: JSONSchema,
     tool_call_schema: JSONSchema,
+    prompt_manager: PromptManager,
 }
 
 impl Default for McpSchemaManager {
@@ -132,6 +134,7 @@ impl McpSchemaManager {
             request_schema,
             response_schema,
             tool_call_schema,
+            prompt_manager: PromptManager::new(),
         }
     }
 
@@ -181,170 +184,13 @@ impl McpSchemaManager {
 
     /// Get the system prompt addition that instructs the LLM to use MCP with custom tool documentation
     pub fn get_mcp_system_prompt_with_tools(&self, tools_doc: &str) -> String {
-        format!(
-            r#"
-You are an AI assistant that follows the Model Context Protocol (MCP).
-You MUST communicate using valid JSON in the JSON-RPC 2.0 format.
-
-Here are the rules:
-
-1. For regular responses, use:
-{{
-  "jsonrpc": "2.0",
-  "result": "Your message here...",
-  "id": "<request_id>"
-}}
-
-2. For tool calls, use:
-{{
-  "jsonrpc": "2.0",
-  "method": "mcp.tool_call",
-  "params": {{
-    "name": "<tool_name>",
-    "parameters": {{
-      // Tool-specific parameters
-    }}
-  }},
-  "id": "<request_id>"
-}}
-
-3. For errors, use:
-{{
-  "jsonrpc": "2.0",
-  "error": {{
-    "code": -32000,
-    "message": "Error description"
-  }},
-  "id": "<request_id>"
-}}
-
-Available tools:
-
-{}
-
-Always ensure your responses are syntactically valid JSON.
-Never include multiple JSON objects in a single response.
-If you require more information or the result of a tool call, make a tool call request and wait for the result.
-
-When working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code
-before making changes or executing commands.
-"#,
-            tools_doc
-        )
+        self.prompt_manager
+            .get_mcp_system_prompt_with_tools(tools_doc)
     }
 
     /// Get the system prompt addition that instructs the LLM to use MCP
     pub fn get_mcp_system_prompt(&self) -> &str {
-        r#"
-You are an AI assistant that follows the Model Context Protocol (MCP).
-You MUST communicate using valid JSON in the JSON-RPC 2.0 format.
-
-Here are the rules:
-
-1. For regular responses, use:
-{
-  "jsonrpc": "2.0",
-  "result": "Your message here...",
-  "id": "<request_id>"
-}
-
-2. For tool calls, use:
-{
-  "jsonrpc": "2.0",
-  "method": "mcp.tool_call",
-  "params": {
-    "name": "<tool_name>",
-    "parameters": {
-      // Tool-specific parameters
-    }
-  },
-  "id": "<request_id>"
-}
-
-3. For errors, use:
-{
-  "jsonrpc": "2.0",
-  "error": {
-    "code": -32000,
-    "message": "Error description"
-  },
-  "id": "<request_id>"
-}
-
-Available tools:
-
-1. "shell": Execute a shell command
-   Parameters: { 
-     "command": "string",           // The shell command to execute
-     "timeout": "number"            // Optional: timeout in milliseconds
-   }
-
-2. "file_read": Read a file
-   Parameters: { 
-     "path": "string"               // Absolute path to the file
-   }
-
-3. "file_write": Write to a file
-   Parameters: { 
-     "path": "string",              // Absolute path to the file
-     "content": "string",           // Content to write
-     "append": "boolean"            // Optional: append instead of overwrite
-   }
-
-4. "directory_list": List files in a directory
-   Parameters: { 
-     "path": "string"               // Absolute path to the directory
-   }
-
-5. "grep": Search file contents with regex patterns
-   Parameters: {
-     "pattern": "string",           // Regex pattern to search for
-     "path": "string",              // Directory to search in
-     "include": "string",           // Optional: Glob pattern for files to include
-     "exclude": "string",           // Optional: Glob pattern for files to exclude
-     "context_lines": "number",     // Optional: Number of context lines to include
-     "max_matches": "number",       // Optional: Maximum number of matches to return
-     "case_sensitive": "boolean",   // Optional: Whether to use case-sensitive matching
-     "recursive": "boolean"         // Optional: Whether to search recursively
-   }
-
-6. "find": Find files matching name patterns
-   Parameters: {
-     "pattern": "string",           // Glob pattern to match files
-     "base_dir": "string",          // Base directory for search
-     "exclude": "string",           // Optional: Glob pattern for files to exclude
-     "max_depth": "number",         // Optional: Maximum directory depth
-     "modified_after": "string",    // Optional: Only find files modified after (YYYY-MM-DD)
-     "modified_before": "string",   // Optional: Only find files modified before (YYYY-MM-DD)
-     "sort_by": "string",           // Optional: Sort by "name", "size", or "modified_time"
-     "order": "string",             // Optional: "asc" or "desc"
-     "include_dirs": "boolean"      // Optional: Include directories in results
-   }
-
-Always ensure your responses are syntactically valid JSON.
-Never include multiple JSON objects in a single response.
-If you require more information or the result of a tool call, make a tool call request and wait for the result.
-
-When working with a codebase, first use the 'find' and 'grep' tools to explore and understand the code
-before making changes or executing commands.
-
-IMPORTANT - Task Completion:
-After completing a task (such as creating files, running commands, etc.), always:
-1. Send a clear message confirming the task is complete
-2. Summarize what was done (files created, changes made, etc.)
-3. Offer relevant next steps (like building, testing, or running the code)
-4. If you created or modified files, explain their purpose or structure
-
-For example, after creating a project, say something like:
-"✓ Successfully created the Rust project! The project structure includes:
-- hello_world/src/main.rs: Contains the main program with Hello World code
-- hello_world/Cargo.toml: Project configuration file
-
-Would you like me to:
-- Build and run the project?
-- Explain the main.rs file?
-- Modify the code to do something more interesting?"
-"#
+        self.prompt_manager.get_mcp_system_prompt()
     }
 }
 

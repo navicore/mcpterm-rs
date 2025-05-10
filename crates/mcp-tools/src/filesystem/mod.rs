@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FilesystemConfig {
@@ -208,7 +208,6 @@ impl Tool for ReadFileTool {
         }
 
         // Read the file
-        info!("Reading file: {}", path);
         match fs::read_to_string(&path_buf) {
             Ok(content) => {
                 debug!("Successfully read file: {} ({} bytes)", path, content.len());
@@ -374,7 +373,6 @@ impl Tool for WriteFileTool {
         }
 
         // Write the file
-        info!("Writing to file: {} (append: {})", path, append);
         let result = if append {
             fs::OpenOptions::new()
                 .create(true)
@@ -527,7 +525,6 @@ impl Tool for ListDirectoryTool {
         }
 
         // Read the directory
-        info!("Listing directory: {}", path);
         match fs::read_dir(&path_buf) {
             Ok(entries) => {
                 let mut entry_list = Vec::new();

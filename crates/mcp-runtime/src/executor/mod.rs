@@ -2,7 +2,7 @@ use anyhow::Result;
 use mcp_metrics::{count, time};
 use mcp_tools::{ToolManager, ToolResult};
 use serde_json::Value;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, trace};
 
 // Coordinates execution of tools with safety constraints
 pub struct ToolExecutor {
@@ -26,7 +26,7 @@ impl ToolExecutor {
 
         // This is a placeholder implementation
         // In the real implementation, we'd apply safety constraints
-        info!("Applying tool safety constraints for: {}", tool_id);
+        debug!("Applying tool safety constraints for: {}", tool_id);
 
         // Time the tool execution
         let result = time!(format!("tool.execution_time.{}", tool_id).as_str(), {

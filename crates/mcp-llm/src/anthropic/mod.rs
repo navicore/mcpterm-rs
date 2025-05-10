@@ -5,7 +5,7 @@ use futures::Stream;
 use mcp_core::context::ConversationContext;
 use mcp_metrics::{count, time};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnthropicConfig {
@@ -35,7 +35,7 @@ pub struct AnthropicClient {
 impl AnthropicClient {
     pub fn new(config: AnthropicConfig) -> Self {
         debug!("Creating new Anthropic client for model: {}", config.model);
-        trace!("Anthropic client config: {:?}", config);
+        // Keeping trace output minimal
         Self { config }
     }
 }
@@ -44,7 +44,7 @@ impl AnthropicClient {
 impl LlmClient for AnthropicClient {
     async fn send_message(&self, _context: &ConversationContext) -> Result<LlmResponse> {
         debug!("Sending message to Anthropic API");
-        trace!("Message context: {:?}", _context);
+        // Keeping trace output minimal
 
         // Count API calls
         count!("llm.calls.total");
@@ -74,7 +74,7 @@ impl LlmClient for AnthropicClient {
             "Received response from Anthropic API with ID: {}",
             response.id
         );
-        trace!("Response content: {}", response.content);
+        // Keeping trace output minimal
 
         Ok(response)
     }
@@ -84,7 +84,7 @@ impl LlmClient for AnthropicClient {
         _context: &ConversationContext,
     ) -> Result<Box<dyn Stream<Item = Result<StreamChunk>> + Unpin + Send>> {
         debug!("Attempting to stream message from Anthropic API");
-        trace!("Stream context: {:?}", _context);
+        // Keeping trace output minimal
 
         // Placeholder implementation
         warn!("Streaming not yet implemented for Anthropic client");

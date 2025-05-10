@@ -1,7 +1,7 @@
 use mcp_metrics::count;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tracing::{debug, trace};
+use tracing::debug;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MessageRole {
@@ -50,8 +50,7 @@ impl ConversationContext {
 
     // Helper methods to add messages of different types
     pub fn add_user_message(&mut self, content: &str) {
-        debug!("Adding user message to conversation");
-        trace!("User message content: {}", content);
+        debug!("Adding user message to conversation:: {}", content);
         self.messages.push(Message {
             role: MessageRole::User,
             content: content.to_string(),
@@ -67,8 +66,7 @@ impl ConversationContext {
     }
 
     pub fn add_assistant_message(&mut self, content: &str) {
-        debug!("Adding assistant message to conversation");
-        trace!("Assistant message content: {}", content);
+        debug!("Adding assistant message to conversation: {}", content);
         self.messages.push(Message {
             role: MessageRole::Assistant,
             content: content.to_string(),
@@ -84,8 +82,7 @@ impl ConversationContext {
     }
 
     pub fn add_tool_message(&mut self, content: &str) {
-        debug!("Adding tool message to conversation");
-        trace!("Tool message content: {}", content);
+        debug!("Adding tool message to conversation: {}", content);
         self.messages.push(Message {
             role: MessageRole::Tool,
             content: content.to_string(),
@@ -101,8 +98,7 @@ impl ConversationContext {
     }
 
     pub fn add_system_message(&mut self, content: &str) {
-        debug!("Adding system message to conversation");
-        trace!("System message content: {}", content);
+        debug!("Adding system message to conversation: {}", content);
         self.messages.push(Message {
             role: MessageRole::System,
             content: content.to_string(),
@@ -118,8 +114,10 @@ impl ConversationContext {
     }
 
     pub fn add_message(&mut self, role: MessageRole, content: &str) {
-        debug!("Adding message with role {:?} to conversation", role);
-        trace!("Message content: {}", content);
+        debug!(
+            "Adding message with role {:?} to conversation: {}",
+            role, content
+        );
         self.messages.push(Message {
             role: role.clone(),
             content: content.to_string(),

@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
 
         // Launch CLI mode
         println!("Launching CLI mode...");
-        mcpterm_cli::cli_main::main().await
+        mcpterm_cli::run_cli().await
     } else {
         // No args and no piped stdin, launch TUI mode
         println!("Launching TUI mode...");
