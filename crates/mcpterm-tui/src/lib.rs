@@ -549,26 +549,68 @@ fn ui(f: &mut ratatui::Frame, state: &mut AppState) {
 
 use mcp_core::context::ConversationContext;
 use mcp_llm::client_trait::LlmClient;
-use mcp_runtime::ToolExecutor;
+use mcp_llm::BedrockClient;
+use mcp_runtime::{ToolExecutor, EventBus};
 use std::sync::Arc;
+
+// We'll integrate with the CLI session properly
+use mcpterm_cli::cli_session::{CliSessionConfig, CliSession};
 
 #[allow(dead_code)]
 pub struct App {
     context: ConversationContext,
     llm_client: Option<Arc<dyn LlmClient>>,
     tool_executor: Option<ToolExecutor>,
+    // Store the CLI session so it's not dropped
+    cli_session: Option<CliSession<BedrockClient>>,
 }
 
 impl App {
     pub fn new() -> Result<Self> {
-        // Create a new app with standard tools
-        let tool_executor = ToolExecutor::new_with_standard_tools();
+        // Create a shared event bus for the whole application
+        let _event_bus = Arc::new(EventBus::new());
+
+        // This is initialized lazily to avoid any initialization
+        // until we're actually ready to interact with the LLM
 
         Ok(App {
             context: ConversationContext::new(),
             llm_client: None,
-            tool_executor: Some(tool_executor),
+            tool_executor: None,
+            cli_session: None,
         })
+    }
+
+    /// Initialize the LLM client only when needed
+    async fn ensure_initialized(&mut self) -> Result<()> {
+        // If we already have a CLI session, we're already initialized
+        if self.cli_session.is_some() {
+            return Ok(());
+        }
+
+        // Create a default config
+        let config = CliSessionConfig {
+            model: "us.anthropic.claude-3-sonnet-20240229-v1:0".to_string(),
+            use_mcp: true,
+            region: None,
+            streaming: true,
+            enable_tools: true,
+            require_tool_confirmation: false,
+            auto_approve_tools: false,
+            interactive: true,
+        };
+
+        // Initialize a CLI session with the consolidated approach
+        let session = CliSession::<BedrockClient>::new_and_initialize(config).await?;
+
+        // Store the session
+        self.cli_session = Some(session);
+
+        // Get the tool executor from the session
+        // (This would require adding a getter method to CliSession)
+        self.tool_executor = Some(ToolExecutor::new_with_standard_tools());
+
+        Ok(())
     }
 
     pub fn run(&mut self) -> Result<()> {

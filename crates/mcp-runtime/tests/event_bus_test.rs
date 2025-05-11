@@ -8,7 +8,7 @@ use tokio::time::{sleep, Duration};
 
 #[tokio::test]
 async fn test_event_bus_multi_handler() -> Result<()> {
-    let bus = EventBus::new();
+    let bus = Arc::new(EventBus::new());
     let counter = Arc::new(AtomicUsize::new(0));
 
     // Register two handlers for the same event type
@@ -43,7 +43,7 @@ async fn test_event_bus_multi_handler() -> Result<()> {
 
 #[tokio::test]
 async fn test_event_bus_cross_channel() -> Result<()> {
-    let bus = EventBus::new();
+    let bus = Arc::new(EventBus::new());
     let ui_received = Arc::new(AtomicUsize::new(0));
     let model_received = Arc::new(AtomicUsize::new(0));
 
@@ -95,7 +95,7 @@ async fn test_event_bus_cross_channel() -> Result<()> {
 
 #[tokio::test]
 async fn test_event_bus_error_handling() -> Result<()> {
-    let bus = EventBus::new();
+    let bus = Arc::new(EventBus::new());
     let success_counter = Arc::new(AtomicUsize::new(0));
 
     // Register a handler that will succeed
@@ -133,7 +133,7 @@ async fn test_event_bus_error_handling() -> Result<()> {
 
 #[tokio::test]
 async fn test_key_event_handling() -> Result<()> {
-    let bus = EventBus::new();
+    let bus = Arc::new(EventBus::new());
     let key_counter = Arc::new(AtomicUsize::new(0));
 
     // Register handler for key events

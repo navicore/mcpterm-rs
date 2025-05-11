@@ -12,7 +12,7 @@ use tokio::time::sleep;
 #[tokio::test(flavor = "multi_thread")]
 async fn test_basic_event_bus_functionality() -> Result<()> {
     // Create a single shared event bus
-    let event_bus = EventBus::new();
+    let event_bus = Arc::new(EventBus::new());
 
     // Create a flag to track UI event processing
     let ui_event_processed = Arc::new(AtomicBool::new(false));

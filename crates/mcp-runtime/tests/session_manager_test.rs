@@ -103,7 +103,7 @@ struct EventCollector {
 }
 
 impl EventCollector {
-    fn new(event_bus: &EventBus) -> Self {
+    fn new(event_bus: &Arc<EventBus>) -> Self {
         let model_events = Arc::new(Mutex::new(Vec::new()));
         let model_events_clone = model_events.clone();
 
@@ -133,7 +133,7 @@ async fn test_session_manager_text_response() {
     let mock_client = MockLlmClient::new();
     let tool_manager = ToolManager::new();
     let tool_executor = ToolExecutor::new(tool_manager);
-    let event_bus = EventBus::new();
+    let event_bus = Arc::new(EventBus::new());
 
     // Start the event bus
     event_bus.start_event_distribution().unwrap();
@@ -206,7 +206,7 @@ async fn test_session_manager_streaming_response() {
     let mock_client = MockLlmClient::new();
     let tool_manager = ToolManager::new();
     let tool_executor = ToolExecutor::new(tool_manager);
-    let event_bus = EventBus::new();
+    let event_bus = Arc::new(EventBus::new());
 
     // Start the event bus
     event_bus.start_event_distribution().unwrap();
@@ -318,7 +318,7 @@ async fn test_session_manager_tool_calls() {
     let mock_client = MockLlmClient::new();
     let tool_manager = ToolManager::new();
     let tool_executor = ToolExecutor::new(tool_manager);
-    let event_bus = EventBus::new();
+    let event_bus = Arc::new(EventBus::new());
 
     // Start the event bus
     event_bus.start_event_distribution().unwrap();
@@ -434,7 +434,7 @@ async fn test_session_manager_cancellation() {
     let mock_client = MockLlmClient::new();
     let tool_manager = ToolManager::new();
     let tool_executor = ToolExecutor::new(tool_manager);
-    let event_bus = EventBus::new();
+    let event_bus = Arc::new(EventBus::new());
 
     // Start the event bus
     event_bus.start_event_distribution().unwrap();

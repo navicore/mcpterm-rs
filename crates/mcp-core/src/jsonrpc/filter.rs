@@ -1,5 +1,6 @@
 use regex::Regex;
 use serde_json::Value;
+use tracing::debug;
 
 /// Filters JSON-RPC tool call messages from user-facing output
 #[derive(Clone)]
@@ -70,14 +71,16 @@ impl JsonRpcFilter {
                         }
                     }
                     Err(_) => {
-                        // Invalid JSON but looks like a tool call
-                        if matched_str.contains("\"jsonrpc\"")
-                            && matched_str.contains("\"method\"")
-                            && matched_str.contains("\"mcp.tool_call\"")
-                        {
-                            let replacement = "[Invalid tool command detected]";
-                            filtered_content.replace_range(start..end, replacement);
-                            start_idx = start + replacement.len();
+                        // Invalid JSON but looks like a JSON fragment
+                        if matched_str.contains("\"") || matched_str.contains("{") || matched_str.contains("[") {
+                            // Quietly remove any JSON-like fragments
+                            debug!("Removing JSON-like fragment: {}",
+                                if matched_str.len() > 30 { &matched_str[0..30] } else { matched_str });
+
+                            // Simply remove the entire invalid JSON from the output
+                            // This prevents fragments from showing up in user output
+                            filtered_content.replace_range(start..end, "");
+                            start_idx = start;
                             continue;
                         }
                     }

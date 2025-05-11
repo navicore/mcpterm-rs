@@ -90,4 +90,11 @@ fn main() {
     println!("Input: {}", actual_claude_structure);
     println!("Output: \n{}", format_llm_response(actual_claude_structure));
     println!();
+
+    // Final check: Verify it works with deeply nested JSON-RPC response
+    let really_nested_json = r#"{"id":"msg_123","content":[{"type":"text","text":"{\n  \"jsonrpc\": \"2.0\",\n  \"result\": \"The file contains an MIT License with copyright held by Ed Sweeney (2025). This license allows users to freely modify and distribute the software.\",\n  \"id\": \"1\"\n}"}],"model":"claude-3-7-sonnet-20250219","role":"assistant"}"#;
+    println!("=== Test 13: Complex nested structure ===");
+    println!("Input: {}", really_nested_json);
+    println!("Output: \n{}", format_llm_response(really_nested_json));
+    println!();
 }

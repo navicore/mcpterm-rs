@@ -11,6 +11,8 @@ const DEFAULT_BUFFER_SIZE: usize = 100;
 /// It manages multiple event channels and allows components to subscribe to
 /// specific event types.
 pub struct EventBus {
+    // Unique identifier for this event bus instance
+    instance_id: u64,
     ui_tx: Sender<UiEvent>,
     ui_rx: Receiver<UiEvent>,
     model_tx: Sender<ModelEvent>,
@@ -28,7 +30,15 @@ impl EventBus {
         let (model_tx, model_rx) = bounded::<ModelEvent>(DEFAULT_BUFFER_SIZE);
         let (api_tx, api_rx) = bounded::<ApiEvent>(DEFAULT_BUFFER_SIZE);
 
+        // Generate a unique instance ID
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+        let instance_id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+
+        debug!("Creating new EventBus with instance ID: {}", instance_id);
+
         Self {
+            instance_id,
             ui_tx,
             ui_rx,
             model_tx,
@@ -47,7 +57,15 @@ impl EventBus {
         let (model_tx, model_rx) = bounded::<ModelEvent>(buffer_size);
         let (api_tx, api_rx) = bounded::<ApiEvent>(buffer_size);
 
+        // Generate a unique instance ID
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+        let instance_id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+
+        debug!("Creating new EventBus with instance ID: {} and buffer size: {}", instance_id, buffer_size);
+
         Self {
+            instance_id,
             ui_tx,
             ui_rx,
             model_tx,
@@ -197,18 +215,28 @@ impl EventBus {
     // This avoids test interference without using thread-local storage
 
     /// Initialize the event distribution loops
-    /// This is idempotent - calling it multiple times on the same or cloned buses
-    /// will only start the distribution once to avoid duplicate handlers
+    /// This is idempotent - calling it multiple times will only start the distribution once
     pub fn start_event_distribution(&self) -> Result<()> {
-        // We use an instance counter pattern to ensure each EventBus instance
-        // gets its own event distribution loops, which solves the test isolation problem
+        // Use a static to track which event buses have started distribution
+        use std::sync::Mutex;
+        use std::collections::HashSet;
+        lazy_static::lazy_static! {
+            static ref STARTED_BUSES: Mutex<HashSet<u64>> = Mutex::new(HashSet::new());
+        }
 
-        // Each instance gets its own static counter
-        static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        // Each event bus instance has a unique ID to track it
+        let instance_id = self.instance_id;
 
-        // Get a unique ID for this event bus
-        let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        debug!("Starting event distribution for bus instance #{}", id);
+        // Check if this bus instance has already started distribution
+        let mut started_buses = STARTED_BUSES.lock().unwrap();
+        if started_buses.contains(&instance_id) {
+            debug!("Event distribution already started for bus instance #{}", instance_id);
+            return Ok(());
+        }
+
+        // Mark this bus as started
+        started_buses.insert(instance_id);
+        debug!("Starting event distribution for bus instance #{}", instance_id);
 
         // Start the three event loops - each event bus gets its own loops
         self.start_ui_event_loop()?;
@@ -400,27 +428,22 @@ impl Default for EventBus {
     }
 }
 
-impl Clone for EventBus {
-    fn clone(&self) -> Self {
-        // Share the same channels and handlers between cloned instances
-        // This ensures all EventBus instances act as a coherent distributed system
-        // where sending to any instance delivers to all registered handlers
-        Self {
-            // Clone senders and receivers to share the same channel infrastructure
-            ui_tx: self.ui_tx.clone(),
-            ui_rx: self.ui_rx.clone(),
-            model_tx: self.model_tx.clone(),
-            model_rx: self.model_rx.clone(),
-            api_tx: self.api_tx.clone(),
-            api_rx: self.api_rx.clone(),
-
-            // Share the same Arc-wrapped handler collections
-            ui_handlers: self.ui_handlers.clone(),
-            model_handlers: self.model_handlers.clone(),
-            api_handlers: self.api_handlers.clone(),
-        }
-    }
-}
+// IMPORTANT: NO DIRECT CLONING
+// Instead of implementing Clone, we'll use Arc<EventBus> throughout the codebase
+// This avoids all the issues with duplicate message processing
+// Clone is deliberately not implemented to prevent accidental use
+//
+// If you need this EventBus in multiple places, wrap it in an Arc when first creating it
+// Then pass the Arc<EventBus> reference around
+//
+// Example:
+//   let event_bus = Arc::new(EventBus::new());
+//   let session_manager = SessionManager::new(client, executor, Arc::clone(&event_bus));
+//   let event_adapter = CliEventAdapter::new(Arc::clone(&event_bus));
+//
+// This ensures a true singleton pattern with proper shared ownership.
+//
+// WARNING: DO NOT IMPLEMENT Clone FOR EventBus - it's an anti-pattern for this type!
 
 #[cfg(test)]
 mod tests {

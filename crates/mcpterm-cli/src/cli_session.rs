@@ -55,6 +55,7 @@ impl<L: LlmClient + 'static> Clone for CliSession<L> {
 }
 
 impl<L: LlmClient + 'static> CliSession<L> {
+    /// Standard constructor - creates an uninitialized session
     pub fn new(config: CliSessionConfig) -> Self {
         // Create a new tool manager with the same configuration as the original CliApp
         let tool_manager = Self::create_tool_manager(&config);
@@ -65,6 +66,19 @@ impl<L: LlmClient + 'static> CliSession<L> {
             event_adapter: None,
             tool_manager,
         }
+    }
+
+    /// Combined constructor and initializer - ensures single initialization path
+    /// This ensures that all initialization steps happen exactly once
+    pub async fn new_and_initialize(config: CliSessionConfig) -> Result<Self> {
+        // Create the session first
+        let mut session = Self::new(config);
+
+        // Initialize it
+        session.initialize().await?;
+
+        // Return the fully initialized session
+        Ok(session)
     }
 
     // Create a tool manager with the standard tools
@@ -80,11 +94,12 @@ impl<L: LlmClient + 'static> CliSession<L> {
 
     // Set a specific LLM client (used for testing)
     pub fn with_llm_client(mut self, client: L) -> Self {
-        let event_bus = EventBus::new();
+        // Create a proper shared event bus
+        let event_bus = Arc::new(EventBus::new());
         let tool_executor = self.create_tool_executor();
 
         // Create the session manager with the client
-        let session_manager = SessionManager::new(client, tool_executor, event_bus);
+        let session_manager = SessionManager::new(client, tool_executor, Arc::clone(&event_bus));
 
         // Store it - we know the type is correct here
         self.session_manager = Some(Arc::new(session_manager));
@@ -113,7 +128,7 @@ impl<L: LlmClient + 'static> CliSession<L> {
             let event_bus = self.session_manager.as_ref().unwrap().get_event_bus();
 
             // Create the event adapter with the event bus (sharing the same event bus)
-            let event_adapter = CliEventAdapter::new((*event_bus).clone(), self.config.interactive);
+            let event_adapter = CliEventAdapter::new(Arc::clone(&event_bus), self.config.interactive);
 
             // Get the model sender from the session manager for direct communication
             let model_sender = self.session_manager.as_ref().unwrap().get_model_sender();
@@ -148,7 +163,7 @@ impl<L: LlmClient + 'static> CliSession<L> {
 
         bedrock_config = bedrock_config.with_system_prompt(system_prompt);
 
-        // Create a single event bus for everything - wrapped in Arc for sharing
+        // Create a single event bus for everything - wrapped in Arc for proper sharing
         let event_bus = Arc::new(EventBus::new());
 
         // Create the tool executor
@@ -191,10 +206,10 @@ impl<L: LlmClient + 'static> CliSession<L> {
         };
 
         // Create a session manager with a reference to our shared event bus
-        let session_manager = SessionManager::new(client, tool_executor, (*event_bus).clone());
+        let session_manager = SessionManager::new(client, tool_executor, Arc::clone(&event_bus));
 
         // Create the event adapter with our shared event bus
-        let event_adapter = CliEventAdapter::new((*event_bus).clone(), self.config.interactive);
+        let event_adapter = CliEventAdapter::new(Arc::clone(&event_bus), self.config.interactive);
 
         // Clear any existing handlers from previous runs to avoid duplicates
         debug!("Clearing any existing handlers before registration");
@@ -224,7 +239,9 @@ impl<L: LlmClient + 'static> CliSession<L> {
         );
 
         // Start event distribution once for our shared event bus
+        debug!("Starting event distribution from CliSession (central location)");
         event_bus.start_event_distribution()?;
+        debug!("Event distribution started successfully");
 
         // Store the components - this requires an unsafe cast since the types don't match
         // In a proper implementation, we'd use better generics or a trait object approach

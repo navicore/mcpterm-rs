@@ -11,6 +11,7 @@ mcp-llm = { path = "../mcp-llm" }
 mcp-runtime = { path = "../mcp-runtime" }
 mcp-tools = { path = "../mcp-tools" }
 mcp-resources = { path = "../mcp-resources" }
+mcpterm-cli = { path = "../mcpterm-cli" }
 anyhow = { workspace = true }
 atty = "0.2"
 clap = { workspace = true }

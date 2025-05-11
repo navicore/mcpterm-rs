@@ -3,7 +3,6 @@
 pub mod extractor;
 pub mod filter;
 pub mod splitter;
-
 pub use extractor::extract_jsonrpc_objects;
 pub use filter::JsonRpcFilter;
 pub use splitter::{split_jsonrpc_and_text, SplitContent};

@@ -116,6 +116,134 @@ impl Default for ResponseFormatter {
     }
 }
 
+/// Extract non-JSON content from a message
+/// This function removes anything that looks like JSON or a code block
+fn extract_non_json_content(content: &str) -> String {
+    // Fast path for empty content
+    if content.trim().is_empty() {
+        return String::new();
+    }
+
+    // If the entire content is valid JSON, return empty string
+    if content.trim().starts_with('{') && content.trim().ends_with('}') {
+        if serde_json::from_str::<serde_json::Value>(content.trim()).is_ok() {
+            debug!("Entire content is valid JSON, returning empty string");
+            return String::new();
+        }
+    }
+
+    let mut result = String::new();
+    let mut text_buffer = String::new();
+    let mut in_json = false;
+    let mut in_code_block = false;
+    let mut brace_count = 0;
+    let mut bracket_count = 0;
+
+    // Extra indicators for JSON-like content
+    let has_jsonrpc = content.contains("\"jsonrpc\"");
+    let has_method = content.contains("\"method\"");
+    let has_params = content.contains("\"params\"");
+    let has_tool_call = content.contains("\"mcp.tool_call\"");
+
+    // Split the content into paragraphs for better handling
+    let paragraphs: Vec<&str> = content.split("\n\n").collect();
+
+    for para in paragraphs {
+        let trimmed = para.trim();
+
+        // Skip empty paragraphs
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Skip paragraphs that look like JSON (matching braces/brackets)
+        if (trimmed.starts_with('{') && trimmed.ends_with('}')) ||
+           (trimmed.starts_with('[') && trimmed.ends_with(']')) {
+            // Check if it's parsable JSON
+            if serde_json::from_str::<serde_json::Value>(trimmed).is_ok() {
+                debug!("Skipping JSON paragraph: {}", if trimmed.len() > 30 { &trimmed[0..30] } else { trimmed });
+                continue;
+            }
+        }
+
+        // Skip paragraphs with JSON-RPC markers
+        if has_jsonrpc && has_method && has_params &&
+           (trimmed.contains("\"jsonrpc\"") || trimmed.contains("\"method\"") ||
+            trimmed.contains("\"params\"") || trimmed.contains("\"mcp.tool_call\"")) {
+            debug!("Skipping paragraph with JSON-RPC markers: {}", if trimmed.len() > 30 { &trimmed[0..30] } else { trimmed });
+            continue;
+        }
+
+        // Process the paragraph line by line
+        let mut para_has_json = false;
+        text_buffer.clear();
+
+        for line in para.lines() {
+            let line_trimmed = line.trim();
+
+            // Check for code block markers
+            if line_trimmed.starts_with("```") {
+                in_code_block = !in_code_block;
+                continue;
+            }
+
+            // Skip code block content
+            if in_code_block {
+                continue;
+            }
+
+            // Calculate brace/bracket balance for this line
+            for c in line_trimmed.chars() {
+                match c {
+                    '{' => { brace_count += 1; if brace_count == 1 { in_json = true; } },
+                    '}' => { brace_count = (brace_count - 1).max(0); if brace_count == 0 { in_json = false; } },
+                    '[' => { bracket_count += 1; if bracket_count == 1 { in_json = true; } },
+                    ']' => { bracket_count = (bracket_count - 1).max(0); if bracket_count == 0 { in_json = false; } },
+                    _ => {}
+                }
+            }
+
+            // Skip lines that look like JSON fragments
+            if in_json ||
+               line_trimmed.starts_with('{') || line_trimmed.starts_with('[') ||
+               line_trimmed.ends_with('}') || line_trimmed.ends_with(']') ||
+               line_trimmed.contains("\"jsonrpc\"") ||
+               line_trimmed.contains("\"id\":") ||
+               line_trimmed.contains("\"method\":") ||
+               line_trimmed.contains("\"params\":") ||
+               line_trimmed.contains("\"status\":") ||
+               line_trimmed.contains("\"tool_id\":") ||
+               line_trimmed.contains("\"error\":") ||
+               (line_trimmed.contains(':') && line_trimmed.contains('\"')) {
+                para_has_json = true;
+                continue;
+            }
+
+            // If the line is not json-like and not empty, add it to the buffer
+            if !line_trimmed.is_empty() {
+                text_buffer.push_str(line);
+                text_buffer.push('\n');
+            }
+        }
+
+        // If the paragraph had no JSON-like content, or if we extracted some text despite JSON markers
+        if !para_has_json || !text_buffer.trim().is_empty() {
+            result.push_str(&text_buffer);
+            result.push('\n');
+        }
+    }
+
+    // Clean up the result
+    let cleaned = result.trim();
+
+    // Handle cases where there's no natural language content extracted
+    if cleaned.is_empty() && has_tool_call {
+        return String::new(); // This was likely just a tool call with no natural language
+    }
+
+    cleaned.to_string()
+}
+
 impl ResponseFormatter {
     /// Format a message for display, removing any JSON-RPC tool calls
     pub fn format_message(&self, message: &str) -> String {
@@ -191,11 +319,48 @@ impl ResponseFormatter {
 
     /// Format shell command output
     fn format_shell_output(output: &mut String, result: &Value) {
+        // For skipped duplicate tool executions, show a friendly message
+        if let Some(skipped) = result.get("skipped").and_then(Value::as_bool) {
+            if skipped {
+                if let Some(msg) = result.get("message").and_then(Value::as_str) {
+                    writeln!(
+                        output,
+                        "{}{}Info:{} {}",
+                        Colors::bold(),
+                        Colors::blue(),
+                        Colors::reset(),
+                        msg
+                    )
+                    .unwrap();
+                    return;
+                }
+            }
+        }
+
+        // Check if the result is empty or invalid
+        if !result.is_object() || result.as_object().unwrap().is_empty() {
+            writeln!(
+                output,
+                "{}{}Note:{} No command details available",
+                Colors::bold(),
+                Colors::yellow(),
+                Colors::reset()
+            )
+            .unwrap();
+            return;
+        }
+
         // Extract details from the shell result
         let command = result
             .get("command")
             .and_then(Value::as_str)
             .unwrap_or("unknown");
+
+        // Skip displaying entirely if command is unknown - don't even show a note
+        if command == "unknown" {
+            return;
+        }
+
         let exit_code = result
             .get("exit_code")
             .and_then(Value::as_i64)
@@ -721,176 +886,130 @@ impl ResponseFormatter {
     }
 }
 
-/// Format LLM responses to enhance readability
-/// Our architecture has several formats:
-/// 1. LlmResponse with a "content" field from mcp-llm
-/// 2. MCP JSON-RPC Response with a "result" field in the protocol
-/// 3. Claude API response with content[].text containing JSON-RPC response
-///    This formatter handles all cases
+/// Format LLM responses using a simple rule: remove all JSON, show only non-JSON text
 pub fn format_llm_response(content: &str) -> String {
-    // First, check if this is a tool call JSON-RPC - if so, skip it entirely
-    if content.contains("\"jsonrpc\"")
-        && content.contains("\"method\"")
-        && (content.contains("\"mcp.tool_call\"") || content.contains("\"params\""))
-    {
-        debug!("Detected tool call JSON-RPC, skipping format: {}", content);
-        return String::new(); // Return empty string to avoid printing the tool call
+    // 1. Tool result messages are handled by event adapter
+    if content.starts_with("Tool '") && content.contains("returned result:") {
+        debug!("Detected tool result message, this needs to be handled by the event adapter");
+        return String::new(); // Return empty string because event_adapter will handle this directly
     }
 
-    // For valid JSON, extract content according to our schema
+    // 2. Check if this is structured JSON that we need to extract content from
     if content.trim().starts_with('{') && content.trim().ends_with('}') {
+        // Try to parse the JSON to handle special cases
         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
-            // CASE 1: Claude API direct response structure (contains content array with text field)
-            // Format: {"content":[{"type":"text","text":"JSON-RPC response as string"}],...}
+            // Handle Claude API direct response ({"content":[{"type":"text","text":"..."}]})
             if let Some(content_array) = parsed.get("content").and_then(|v| v.as_array()) {
                 if !content_array.is_empty() {
                     if let Some(text) = content_array[0].get("text").and_then(|v| v.as_str()) {
-                        // Skip if this is a tool call
-                        if text.contains("\"jsonrpc\"")
-                            && text.contains("\"method\"")
-                            && (text.contains("\"mcp.tool_call\"") || text.contains("\"params\""))
-                        {
-                            debug!("Detected tool call in content text, skipping format");
-                            return String::new();
-                        }
-
-                        // This is the Claude Bedrock API format - the text field contains a JSON-RPC response
+                        // Check if text is a JSON string that needs to be parsed (common in Bedrock response)
                         if text.trim().starts_with('{') && text.trim().ends_with('}') {
-                            if let Ok(inner_json) = serde_json::from_str::<serde_json::Value>(text)
-                            {
-                                // Skip if this is a tool call
-                                if inner_json.get("method").is_some() {
-                                    debug!(
-                                        "Detected method field in inner JSON, likely a tool call"
-                                    );
-                                    return String::new();
-                                }
-
-                                // If it's a JSON-RPC response, extract the result field
+                            debug!("Found JSON in content[0].text field, attempting to parse");
+                            if let Ok(inner_json) = serde_json::from_str::<serde_json::Value>(text) {
+                                // If it's a JSON-RPC message with a result, extract the result
                                 if inner_json.get("jsonrpc").is_some() {
                                     if let Some(result) = inner_json.get("result") {
-                                        if let Some(result_str) = result.as_str() {
-                                            return result_str.to_string();
+                                        if let Some(result_text) = result.as_str() {
+                                            return extract_non_json_content(result_text);
                                         }
                                     }
                                 }
                             }
                         }
-                        // If not a recognized format, return the text directly
-                        return text.to_string();
+
+                        // If not JSON or couldn't parse, apply our non-JSON extraction rule to the inner text
+                        return extract_non_json_content(text);
                     }
                 }
             }
-
-            // CASE 2: LlmResponse format (with a string "content" field)
-            // Format: {"content":"text or JSON string",...}
+            
+            // Handle simple content field ({"content":"..."})
             if let Some(text) = parsed.get("content").and_then(|v| v.as_str()) {
-                // Skip if this is a tool call
-                if text.contains("\"jsonrpc\"")
-                    && text.contains("\"method\"")
-                    && (text.contains("\"mcp.tool_call\"") || text.contains("\"params\""))
-                {
-                    debug!("Detected tool call in content field, skipping format");
-                    return String::new();
-                }
-
-                // Check if this content is actually JSON itself (common in LLM responses)
+                // Check if content is a JSON string that needs to be parsed
                 if text.trim().starts_with('{') && text.trim().ends_with('}') {
-                    if let Ok(nested_json) = serde_json::from_str::<serde_json::Value>(text) {
-                        // Skip if this is a tool call
-                        if nested_json.get("method").is_some() {
-                            debug!("Detected method field in nested JSON, likely a tool call");
-                            return String::new();
-                        }
-
-                        // If it's a JSON-RPC response, extract the result field
-                        if nested_json.get("jsonrpc").is_some() {
-                            if let Some(result) = nested_json.get("result") {
-                                if let Some(result_str) = result.as_str() {
-                                    return result_str.to_string();
+                    // Try to parse the embedded JSON
+                    if let Ok(inner_json) = serde_json::from_str::<serde_json::Value>(text) {
+                        // If it has jsonrpc field, it's likely a JSON-RPC response
+                        if inner_json.get("jsonrpc").is_some() {
+                            // Extract the result field
+                            if let Some(inner_result) = inner_json.get("result") {
+                                if let Some(inner_text) = inner_result.as_str() {
+                                    return extract_non_json_content(inner_text);
                                 }
                             }
                         }
                     }
                 }
-                return text.to_string();
-            }
 
-            // Skip if this is a tool call
-            if parsed.get("method").is_some() {
-                debug!("Detected method field in JSON, likely a tool call");
-                return String::new();
+                // If not JSON or couldn't parse, just extract non-JSON
+                return extract_non_json_content(text);
             }
-
-            // CASE 3: JSON-RPC Response format (with "result" field)
-            // Format: {"jsonrpc":"2.0","result":"text or object",...}
+            
+            // Handle JSON-RPC result ({"jsonrpc":"2.0","result":"..."})
             if let Some(result) = parsed.get("result") {
-                // If result is a string, return it directly
                 if let Some(text) = result.as_str() {
-                    return text.to_string();
-                }
+                    // Result is a string - apply non-JSON extraction
+                    return extract_non_json_content(text);
+                } else if result.is_object() {
+                    // Result is an object - check for common fields
+                    if let Some(content) = result.get("content").and_then(|v| v.as_str()) {
+                        return extract_non_json_content(content);
+                    } else if let Some(id) = result.get("id").and_then(|v| v.as_str()) {
+                        // This might be a response object
+                        debug!("Found ID in result object: {}", id);
 
-                // If result is an object with content field, extract that
-                if let Some(content) = result.get("content") {
-                    if let Some(text) = content.as_str() {
-                        return text.to_string();
+                        // Best effort - stringify the entire result object
+                        let result_str = serde_json::to_string_pretty(result).unwrap_or_default();
+                        return extract_non_json_content(&result_str);
                     }
                 }
 
-                // Handle array of responses (common in some tool results)
-                if let Some(array) = result.as_array() {
-                    if !array.is_empty() {
-                        let mut combined = String::new();
-                        for (i, item) in array.iter().enumerate() {
-                            if i > 0 {
-                                combined.push_str("\n\n");
-                            }
-
-                            if let Some(text) = item.as_str() {
-                                combined.push_str(text);
-                            } else if item.is_object() {
-                                // Try to get content field or stringify the object
-                                if let Some(text) = item.get("content").and_then(|v| v.as_str()) {
-                                    combined.push_str(text);
-                                } else if let Ok(pretty) = serde_json::to_string_pretty(item) {
-                                    combined.push_str(&pretty);
-                                }
-                            }
-                        }
-                        if !combined.is_empty() {
-                            return combined;
-                        }
-                    }
+                // If we reach here, just stringify the whole result and extract non-JSON
+                let result_str = serde_json::to_string_pretty(result).unwrap_or_default();
+                let extracted = extract_non_json_content(&result_str);
+                if !extracted.is_empty() {
+                    return extracted;
                 }
 
-                // If we got here, try to extract just the stringified value without the object wrapper
-                if let Ok(result_pretty) = serde_json::to_string_pretty(result) {
-                    // The special case that's causing our problems
-                    if result_pretty.contains("Here are") || result_pretty.contains("\\n") {
-                        // This looks like an escaped string we should unescape
-                        let result_str = result_pretty.trim_matches('"');
-
-                        // Unescape the JSON string (replace \\n with \n, etc.)
-                        let unescaped = result_str
-                            .replace("\\n", "\n")
-                            .replace("\\\"", "\"")
-                            .replace("\\\\", "\\");
-                        return unescaped;
-                    }
-
-                    // Otherwise, return the pretty-printed but stringified result
-                    return result_pretty;
+                // Last resort - convert escapes and try again
+                if let Ok(json_str) = serde_json::to_string(result) {
+                    let unescaped = json_str
+                        .trim_matches('"')
+                        .replace("\\n", "\n")
+                        .replace("\\\"", "\"")
+                        .replace("\\\\", "\\");
+                    return extract_non_json_content(&unescaped);
                 }
-
-                // Last resort fallback - just return the original result
-                return result.to_string();
             }
         }
-
-        // If we reached here, it's invalid JSON structure
-        debug!("Received JSON response in unexpected format: {}", content);
     }
 
-    // Return the content directly if it's not JSON or we couldn't parse it
-    content.to_string()
+    // 3. For any other content, apply our core extraction rule
+    debug!("Extracting non-JSON content from message");
+    let non_json = extract_non_json_content(content);
+    
+    // If we found non-JSON content, return it
+    if !non_json.is_empty() {
+        debug!("Showing non-JSON content to user: {}", non_json);
+        return non_json;
+    }
+
+    // If there's nothing left after extracting non-JSON content, check for informational phrases
+    // that might indicate there was some useful information in the original content
+    let trimmed = content.trim();
+    if trimmed.contains("I'll") || trimmed.contains("let me") || trimmed.contains("Let me") ||
+       trimmed.contains("help") || trimmed.contains("create") || 
+       trimmed.contains("I need") || trimmed.contains("I will") ||
+       trimmed.contains("First") || trimmed.contains("Now") ||
+       trimmed.contains("check") || trimmed.contains("make") ||
+       trimmed.contains("build") || trimmed.contains("implement") {
+        // Try to extract just the first line, which might be helpful
+        if let Some(line) = trimmed.lines().next() {
+            return line.to_string();
+        }
+    }
+
+    // Nothing useful found
+    debug!("No non-JSON content found to display");
+    String::new()
 }
