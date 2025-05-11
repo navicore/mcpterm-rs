@@ -2263,6 +2263,7 @@ dependencies = [
  "aws-config",
  "aws-sdk-bedrockruntime",
  "clap",
+ "crossbeam-channel",
  "futures",
  "mcp-core",
  "mcp-llm",

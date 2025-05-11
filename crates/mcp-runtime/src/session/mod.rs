@@ -3,6 +3,7 @@ use crate::executor::ToolExecutor;
 use anyhow::{anyhow, Result};
 use futures::StreamExt;
 use mcp_core::context::ConversationContext;
+use mcp_core::jsonrpc::JsonRpcFilter;
 use mcp_llm::client_trait::{LlmClient, LlmResponse, StreamChunk};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -89,18 +90,34 @@ impl<L: LlmClient + 'static> SessionManager<L> {
 
     // Register all event handlers with the event bus
     pub fn register_handlers(&self) -> Result<()> {
+        debug!("Registering session manager handlers with event bus");
+
         // UI event handler
         let ui_handler = self.create_ui_handler();
         self.event_bus.register_ui_handler(ui_handler)?;
+        debug!("Registered UI event handler");
 
         // Model event handler
         let model_handler = self.create_model_handler();
+        // Log handler counts for debugging
+        let model_handlers_count_before = self.event_bus.model_handlers();
+        debug!(
+            "Model handlers before registration: {}",
+            model_handlers_count_before
+        );
         self.event_bus.register_model_handler(model_handler)?;
+        let model_handlers_count_after = self.event_bus.model_handlers();
+        debug!(
+            "Model handlers after registration: {}",
+            model_handlers_count_after
+        );
 
         // API event handler
         let api_handler = self.create_api_handler();
         self.event_bus.register_api_handler(api_handler)?;
+        debug!("Registered API event handler");
 
+        debug!("Successfully registered all session manager handlers");
         Ok(())
     }
 
@@ -128,9 +145,14 @@ impl<L: LlmClient + 'static> SessionManager<L> {
             Box::pin(async move {
                 match event {
                     UiEvent::UserInput(content) => {
-                        debug!("Received user input: {}", content);
+                        debug!("SessionManager UI handler received user input: {}", content);
                         session.add_user_message(&content);
-                        let _ = model_tx.send(ModelEvent::ProcessUserMessage(content));
+                        debug!("Sending ProcessUserMessage to model channel");
+                        if let Err(e) = model_tx.send(ModelEvent::ProcessUserMessage(content)) {
+                            error!("Failed to send ProcessUserMessage event: {}", e);
+                        } else {
+                            debug!("Successfully sent ProcessUserMessage to model channel");
+                        }
                     }
                     UiEvent::RequestCancellation => {
                         debug!("Request cancellation received");
@@ -173,7 +195,10 @@ impl<L: LlmClient + 'static> SessionManager<L> {
             Box::pin(async move {
                 match event {
                     ModelEvent::ProcessUserMessage(message) => {
-                        debug!("Processing user message: {}", message);
+                        debug!(
+                            "Processing user message: {} in SessionManager model event handler",
+                            message
+                        );
 
                         // Get conversation context
                         let context = match session.get_context().read() {
@@ -353,6 +378,9 @@ impl<L: LlmClient + 'static> SessionManager<L> {
         model_tx: &crossbeam_channel::Sender<ModelEvent>,
         tool_executor: &ToolExecutor,
     ) -> Result<()> {
+        // Create a new JsonRpcFilter for this processing
+        let json_filter = JsonRpcFilter::new();
+        debug!("Processing stream chunk: {:?}", chunk);
         if chunk.is_tool_call {
             if let Some(tool_call) = chunk.tool_call {
                 debug!(
@@ -392,11 +420,72 @@ impl<L: LlmClient + 'static> SessionManager<L> {
             // Handle normal content
             debug!("Received content: {}", chunk.content);
 
-            // Update assistant message
-            session.add_assistant_message(&chunk.content);
+            // Use the JsonRpcFilter to filter out JSON-RPC content and keep only user-facing text
+            let filtered_content = json_filter.filter_json_rpc(&chunk.content);
 
-            // Send event for UI update
-            let _ = model_tx.send(ModelEvent::LlmStreamChunk(chunk.content));
+            // Check if the content was filtered (meaning it contained JSON-RPC tool calls)
+            let content_was_filtered = filtered_content != chunk.content;
+
+            if content_was_filtered {
+                debug!("Detected and filtered JSON-RPC tool calls from content");
+
+                // Extract JSON-RPC objects to execute any tool calls
+                let json_objects = mcp_core::extract_jsonrpc_objects(&chunk.content);
+
+                for json_obj in &json_objects {
+                    if let Some(method) = json_obj.get("method").and_then(|v| v.as_str()) {
+                        if method == "mcp.tool_call" {
+                            if let Some(params) = json_obj.get("params") {
+                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str())
+                                {
+                                    if let Some(parameters) = params.get("parameters") {
+                                        debug!("Executing tool call from JSON-RPC: {}", tool_name);
+
+                                        // Send tool request event
+                                        let _ = model_tx.send(ModelEvent::ToolRequest(
+                                            tool_name.to_string(),
+                                            parameters.clone(),
+                                        ));
+
+                                        // Execute the tool
+                                        match tool_executor
+                                            .execute_tool(tool_name, parameters.clone())
+                                            .await
+                                        {
+                                            Ok(result) => {
+                                                // Send the result back to model
+                                                let _ = model_tx.send(ModelEvent::ToolResult(
+                                                    tool_name.to_string(),
+                                                    serde_json::to_value(result)?,
+                                                ));
+                                            }
+                                            Err(e) => {
+                                                error!("Tool execution error: {:?}", e);
+                                                // Send error as a result
+                                                let error_value = serde_json::json!({
+                                                    "error": e.to_string(),
+                                                });
+                                                let _ = model_tx.send(ModelEvent::ToolResult(
+                                                    tool_name.to_string(),
+                                                    error_value,
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Send the filtered content (without JSON-RPC) to the UI
+            // If no filtering was needed, this will be the original content
+            if !filtered_content.is_empty() {
+                debug!("Sending user-facing content");
+                session.add_assistant_message(&filtered_content);
+                let _ = model_tx.send(ModelEvent::LlmStreamChunk(filtered_content));
+            }
         }
 
         Ok(())
@@ -409,6 +498,8 @@ impl<L: LlmClient + 'static> SessionManager<L> {
         model_tx: &crossbeam_channel::Sender<ModelEvent>,
         tool_executor: &ToolExecutor,
     ) -> Result<()> {
+        // Create a new JsonRpcFilter for this processing
+        let json_filter = JsonRpcFilter::new();
         // Check for tool calls
         if !response.tool_calls.is_empty() {
             for tool_call in response.tool_calls {
@@ -449,11 +540,71 @@ impl<L: LlmClient + 'static> SessionManager<L> {
             // Handle normal content
             debug!("Received content: {}", response.content);
 
-            // Update assistant message
-            session.add_assistant_message(&response.content);
+            // Use JsonRpcFilter to filter out any tool calls
+            let filtered_content = json_filter.filter_json_rpc(&response.content);
 
-            // Send event for UI update
-            let _ = model_tx.send(ModelEvent::LlmMessage(response.content));
+            // Check if the content was filtered (contained JSON-RPC)
+            let content_was_filtered = filtered_content != response.content;
+
+            if content_was_filtered {
+                debug!("Detected and filtered JSON-RPC tool calls from content");
+
+                // Extract and process any tool calls
+                let json_objects = mcp_core::extract_jsonrpc_objects(&response.content);
+
+                for json_obj in &json_objects {
+                    if let Some(method) = json_obj.get("method").and_then(|v| v.as_str()) {
+                        if method == "mcp.tool_call" {
+                            if let Some(params) = json_obj.get("params") {
+                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str())
+                                {
+                                    if let Some(parameters) = params.get("parameters") {
+                                        debug!("Executing tool call from JSON-RPC: {}", tool_name);
+
+                                        // Send tool request event
+                                        let _ = model_tx.send(ModelEvent::ToolRequest(
+                                            tool_name.to_string(),
+                                            parameters.clone(),
+                                        ));
+
+                                        // Execute the tool
+                                        match tool_executor
+                                            .execute_tool(tool_name, parameters.clone())
+                                            .await
+                                        {
+                                            Ok(result) => {
+                                                // Send the result back to model
+                                                let _ = model_tx.send(ModelEvent::ToolResult(
+                                                    tool_name.to_string(),
+                                                    serde_json::to_value(result)?,
+                                                ));
+                                            }
+                                            Err(e) => {
+                                                error!("Tool execution error: {:?}", e);
+                                                // Send error as a result
+                                                let error_value = serde_json::json!({
+                                                    "error": e.to_string(),
+                                                });
+                                                let _ = model_tx.send(ModelEvent::ToolResult(
+                                                    tool_name.to_string(),
+                                                    error_value,
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Send the filtered content (without JSON-RPC) to the UI
+            if !filtered_content.is_empty() {
+                debug!("Sending user-facing content");
+                session.add_assistant_message(&filtered_content);
+                let _ = model_tx.send(ModelEvent::LlmMessage(filtered_content));
+            }
         }
 
         Ok(())
