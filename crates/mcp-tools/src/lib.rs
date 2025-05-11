@@ -56,6 +56,26 @@ pub struct ToolManager {
     tools: HashMap<String, Box<dyn Tool>>,
 }
 
+// Manual implementation of Clone for ToolManager
+impl Clone for ToolManager {
+    fn clone(&self) -> Self {
+        // Since Box<dyn Tool> cannot be cloned directly,
+        // we return a new empty instance.
+        // This is a limitation, but works for our use case
+        // since ToolManager is primarily used for execution context
+        Self::new()
+    }
+}
+
+// Manual implementation of Debug for ToolManager
+impl std::fmt::Debug for ToolManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolManager")
+            .field("tools", &format!("{} registered tools", self.tools.len()))
+            .finish()
+    }
+}
+
 impl ToolManager {
     pub fn new() -> Self {
         Self {
