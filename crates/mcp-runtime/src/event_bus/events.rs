@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 /// Trait that all event types should implement
-pub trait EventType: Send + std::fmt::Debug + Clone {}
+pub trait EventType: Send + std::fmt::Debug {}
 
 /// Event handler trait for async event processing
 pub trait EventHandlerTrait<T>: Send + Sync {

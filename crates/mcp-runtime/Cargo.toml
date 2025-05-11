@@ -10,7 +10,6 @@ mcp-metrics = { path = "../mcp-metrics" }
 mcp-resources = { path = "../mcp-resources" }
 mcp-tools = { path = "../mcp-tools" }
 mcp-llm = { path = "../mcp-llm" }
-# Removed mcpterm-cli dependency to avoid circular dependency
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 crossbeam-channel = { workspace = true }

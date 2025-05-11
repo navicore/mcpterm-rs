@@ -12,12 +12,6 @@ pub mod search;
 pub mod shell;
 pub mod testing;
 
-// Re-export tool registry functions
-pub use registry::{
-    create_tool_manager, create_tool_manager_with_config, default_filesystem_config,
-    default_shell_config, register_standard_tools,
-};
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolCategory {
     Shell,
@@ -60,26 +54,6 @@ pub trait Tool: Send + Sync {
 
 pub struct ToolManager {
     tools: HashMap<String, Box<dyn Tool>>,
-}
-
-// Manual implementation of Clone for ToolManager
-impl Clone for ToolManager {
-    fn clone(&self) -> Self {
-        // Since Box<dyn Tool> cannot be cloned directly,
-        // we return a new empty instance.
-        // This is a limitation, but works for our use case
-        // since ToolManager is primarily used for execution context
-        Self::new()
-    }
-}
-
-// Manual implementation of Debug for ToolManager
-impl std::fmt::Debug for ToolManager {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ToolManager")
-            .field("tools", &format!("{} registered tools", self.tools.len()))
-            .finish()
-    }
 }
 
 impl ToolManager {
