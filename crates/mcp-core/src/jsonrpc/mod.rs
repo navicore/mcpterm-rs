@@ -2,9 +2,11 @@
 
 pub mod extractor;
 pub mod splitter;
+pub mod filter;
 
 pub use extractor::extract_jsonrpc_objects;
 pub use splitter::{split_jsonrpc_and_text, SplitContent};
+pub use filter::JsonRpcFilter;
 
 use serde_json::Value;
 use anyhow::Result;

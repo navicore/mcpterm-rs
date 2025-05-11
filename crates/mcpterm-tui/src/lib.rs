@@ -547,11 +547,27 @@ fn ui(f: &mut ratatui::Frame, state: &mut AppState) {
     }
 }
 
-pub struct App {}
+use mcp_core::context::ConversationContext;
+use mcp_llm::client_trait::LlmClient;
+use mcp_runtime::ToolExecutor;
+use std::sync::Arc;
+
+pub struct App {
+    context: ConversationContext,
+    llm_client: Option<Arc<dyn LlmClient>>,
+    tool_executor: Option<ToolExecutor>,
+}
 
 impl App {
     pub fn new() -> Result<Self> {
-        Ok(App {})
+        // Create a new app with standard tools
+        let tool_executor = ToolExecutor::new_with_standard_tools();
+
+        Ok(App {
+            context: ConversationContext::new(),
+            llm_client: None,
+            tool_executor: Some(tool_executor),
+        })
     }
 
     pub fn run(&mut self) -> Result<()> {

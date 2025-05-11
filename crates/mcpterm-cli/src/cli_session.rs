@@ -4,15 +4,7 @@ use mcp_llm::{BedrockClient, BedrockConfig, LlmClient};
 use mcp_runtime::{
     event_bus, ApiEvent, EventBus, ModelEvent, SessionManager, ToolExecutor, UiEvent,
 };
-use mcp_tools::{
-    analysis::LanguageAnalyzerTool,
-    diff::{DiffTool, PatchTool},
-    filesystem::{FilesystemConfig, ListDirectoryTool, ReadFileTool, WriteFileTool},
-    search::{FindConfig, FindTool, GrepConfig, GrepTool},
-    shell::{ShellConfig, ShellTool},
-    testing::TestRunnerTool,
-    ToolManager,
-};
+use mcp_tools::{ToolManager};
 use std::sync::Arc;
 use tracing::debug;
 
@@ -49,7 +41,7 @@ pub struct CliSession<L: LlmClient + 'static> {
     config: CliSessionConfig,
     session_manager: Option<Arc<SessionManager<L>>>,
     event_adapter: Option<CliEventAdapter>,
-    tool_manager: ToolManager,
+    tool_manager: Arc<ToolManager>,
 }
 
 // Implementation for any LLM client
@@ -59,7 +51,7 @@ impl<L: LlmClient + 'static> Clone for CliSession<L> {
             config: self.config.clone(),
             session_manager: self.session_manager.clone(),
             event_adapter: None, // The adapter can't be cloned
-            tool_manager: self.tool_manager.clone(),
+            tool_manager: self.tool_manager.clone(), // Now safe to clone as it's Arc
         }
     }
 }
@@ -78,99 +70,14 @@ impl<L: LlmClient + 'static> CliSession<L> {
     }
 
     // Create a tool manager with the standard tools
-    fn create_tool_manager(config: &CliSessionConfig) -> ToolManager {
-        let mut tool_manager = ToolManager::new();
-
-        // Register the shell tool with configuration
-        let shell_config = ShellConfig {
-            default_timeout_ms: 30000, // 30 seconds default timeout
-            max_timeout_ms: 300000,    // 5 minutes maximum timeout
-            allowed_commands: None,    // No specific whitelist
-            denied_commands: Some(vec![
-                "rm -rf".to_string(),   // Prevent dangerous recursive deletion
-                "sudo".to_string(),     // Prevent sudo commands
-                "chmod".to_string(),    // Prevent permission changes
-                "chown".to_string(),    // Prevent ownership changes
-                "mkfs".to_string(),     // Prevent formatting
-                "dd".to_string(),       // Prevent raw disk operations
-                "shutdown".to_string(), // Prevent shutdown
-                "reboot".to_string(),   // Prevent reboot
-                "halt".to_string(),     // Prevent halt
-            ]),
-        };
-
+    fn create_tool_manager(config: &CliSessionConfig) -> Arc<ToolManager> {
         if config.enable_tools {
-            let shell_tool = ShellTool::with_config(shell_config);
-            tool_manager.register_tool(Box::new(shell_tool));
-
-            // Register filesystem tools with default configuration
-            let filesystem_config = FilesystemConfig {
-                // Use default denied paths to protect sensitive areas
-                denied_paths: Some(vec![
-                    "/etc/".to_string(),
-                    "/var/".to_string(),
-                    "/usr/".to_string(),
-                    "/bin/".to_string(),
-                    "/sbin/".to_string(),
-                    "/.ssh/".to_string(),
-                    "/.aws/".to_string(),
-                    "/.config/".to_string(),
-                    "C:\\Windows\\".to_string(),
-                    "C:\\Program Files\\".to_string(),
-                    "C:\\Program Files (x86)\\".to_string(),
-                ]),
-                allowed_paths: None, // Allow all paths not explicitly denied
-                max_file_size: 10 * 1024 * 1024, // 10 MB max file size
-            };
-
-            let read_file_tool = ReadFileTool::with_config(filesystem_config.clone());
-            tool_manager.register_tool(Box::new(read_file_tool));
-
-            let write_file_tool = WriteFileTool::with_config(filesystem_config.clone());
-            tool_manager.register_tool(Box::new(write_file_tool));
-
-            let list_dir_tool = ListDirectoryTool::with_config(filesystem_config.clone());
-            tool_manager.register_tool(Box::new(list_dir_tool));
-
-            // Register search tools
-            let grep_config = GrepConfig {
-                denied_paths: filesystem_config.denied_paths.clone(),
-                allowed_paths: filesystem_config.allowed_paths.clone(),
-                ..GrepConfig::default()
-            };
-            let grep_tool = GrepTool::with_config(grep_config);
-            tool_manager.register_tool(Box::new(grep_tool));
-
-            let find_config = FindConfig {
-                denied_paths: filesystem_config.denied_paths.clone(),
-                allowed_paths: filesystem_config.allowed_paths.clone(),
-                ..FindConfig::default()
-            };
-            let find_tool = FindTool::with_config(find_config);
-            tool_manager.register_tool(Box::new(find_tool));
-
-            // Register diff and patch tools
-            let diff_tool = DiffTool::new();
-            tool_manager.register_tool(Box::new(diff_tool));
-
-            // Register patch tool with explicit identifier matching the prompt
-            let patch_tool = PatchTool::new();
-            tool_manager.register_tool(Box::new(patch_tool));
-
-            // Register project navigator tool
-            let project_navigator = mcp_tools::analysis::ProjectNavigator::new();
-            tool_manager.register_tool(Box::new(project_navigator));
-
-            // Register language analyzer tool
-            let language_analyzer = LanguageAnalyzerTool::new();
-            tool_manager.register_tool(Box::new(language_analyzer));
-
-            // Register test runner tool
-            let test_runner = TestRunnerTool::new();
-            tool_manager.register_tool(Box::new(test_runner));
+            // Use the ToolFactory to create a shared tool manager with standard tools
+            mcp_runtime::ToolFactory::create_shared_tool_manager()
+        } else {
+            // If tools are disabled, return an empty tool manager
+            Arc::new(ToolManager::new())
         }
-
-        tool_manager
     }
 
     // Set a specific LLM client (used for testing)
@@ -192,8 +99,8 @@ impl<L: LlmClient + 'static> CliSession<L> {
         // In a complete implementation, we would create a specialized wrapper tool manager
         // that includes confirmation logic for each tool.
 
-        // For now, just use the original tool manager
-        ToolExecutor::new(self.tool_manager.clone())
+        // Pass our shared tool manager to the ToolExecutor
+        mcp_runtime::executor::ToolFactory::create_executor_with_shared_manager(self.tool_manager.clone())
     }
 
     // Initialize the session with the event bus and Session Manager
