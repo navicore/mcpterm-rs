@@ -3,6 +3,13 @@
 
 A terminal-based client for the Model Context Protocol (MCP), written in Rust.
 
+# WARNING this was a fun but totally NAIVE attempt -
+# WARNING this was a fun but totally NAIVE attempt -
+# WARNING this was a fun but totally NAIVE attempt -
+# WARNING this was a fun but totally NAIVE attempt -
+I didn't read MCP spec too carefully - didn't take advantage of the tool support
+in the anthropic API so all the bugs related to parsing were unnessesary.
+
 ## Project Structure
 
 This project follows a modular architecture to ensure separation of concerns and testability. It uses a workspace-based Cargo structure with the following crates:
