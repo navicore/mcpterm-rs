@@ -594,10 +594,19 @@ impl<L: LlmClient + 'static> SessionManager<L> {
             if !filtered_content.is_empty() {
                 debug!("Sending user-facing content");
 
-                // Check if the filtered content is a valid JSON fragment by looking for unmatched braces
-                // If it contains unmatched braces, it's likely a partial JSON object that should be suppressed
-                let is_malformed_json = filtered_content.contains('{') != filtered_content.contains('}')
-                    || filtered_content.contains('[') != filtered_content.contains(']');
+                // Check if it looks like natural language (has spaces, periods, and is reasonably long)
+                let looks_like_natural_language = filtered_content.contains(' ') &&
+                                               filtered_content.contains('.') &&
+                                               filtered_content.len() > 30;
+
+                // Only consider it malformed JSON if it doesn't look like natural language
+                let is_malformed_json = if looks_like_natural_language {
+                    false // Natural language is not malformed JSON
+                } else {
+                    // For short non-natural messages, check if they have unbalanced braces
+                    filtered_content.contains('{') != filtered_content.contains('}')
+                        || filtered_content.contains('[') != filtered_content.contains(']')
+                };
 
                 // Also check if it's just JSON object or array start/end markers with no content
                 let is_empty_json_markers = filtered_content.trim() == "{}"
@@ -765,10 +774,19 @@ impl<L: LlmClient + 'static> SessionManager<L> {
             if !filtered_content.is_empty() {
                 debug!("Sending user-facing content");
 
-                // Check if the filtered content is a valid JSON fragment by looking for unmatched braces
-                // If it contains unmatched braces, it's likely a partial JSON object that should be suppressed
-                let is_malformed_json = filtered_content.contains('{') != filtered_content.contains('}')
-                    || filtered_content.contains('[') != filtered_content.contains(']');
+                // Check if it looks like natural language (has spaces, periods, and is reasonably long)
+                let looks_like_natural_language = filtered_content.contains(' ') &&
+                                               filtered_content.contains('.') &&
+                                               filtered_content.len() > 30;
+
+                // Only consider it malformed JSON if it doesn't look like natural language
+                let is_malformed_json = if looks_like_natural_language {
+                    false // Natural language is not malformed JSON
+                } else {
+                    // For short non-natural messages, check if they have unbalanced braces
+                    filtered_content.contains('{') != filtered_content.contains('}')
+                        || filtered_content.contains('[') != filtered_content.contains(']')
+                };
 
                 // Also check if it's just JSON object or array start/end markers with no content
                 let is_empty_json_markers = filtered_content.trim() == "{}"
