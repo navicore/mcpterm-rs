@@ -131,7 +131,7 @@ impl EventBus {
 
                 // If we have at least one handler, make sure we log every time
                 // This helps with debugging to ensure handlers are properly registered
-                if handlers.len() > 0 {
+                if !handlers.is_empty() {
                     debug!(
                         "Model event handler registration successful, now have {} handler(s)",
                         handlers.len()
@@ -288,15 +288,18 @@ impl EventBus {
                                 // Only log and continue - never break the bridge thread
                                 warn!("Failed to forward {} event: {}", thread_name, e);
                             }
-                        },
+                        }
                         Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
                             // Normal timeout - just keep waiting
                             continue;
-                        },
+                        }
                         Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
                             // Channel disconnected, but we'll keep running
                             // In a properly designed system, this shouldn't happen
-                            warn!("{} event channel disconnected, waiting for reconnection", thread_name);
+                            warn!(
+                                "{} event channel disconnected, waiting for reconnection",
+                                thread_name
+                            );
                             std::thread::sleep(std::time::Duration::from_millis(100));
                         }
                     }
@@ -360,7 +363,9 @@ impl EventBus {
                     // Spawn each handler in its own task
                     let handle = tokio::spawn(async move {
                         match handler.handle(event_clone).await {
-                            Ok(_) => debug!("Handler for {} event completed successfully", name_clone),
+                            Ok(_) => {
+                                debug!("Handler for {} event completed successfully", name_clone)
+                            }
                             Err(e) => warn!("Error in {} event handler: {}", name_clone, e),
                         }
                     });
@@ -373,7 +378,10 @@ impl EventBus {
                 futures::future::join_all(join_handles).await;
             } else {
                 // This happens on channel closure or heartbeat
-                debug!("{} event loop heartbeat or channel temporarily closed", name);
+                debug!(
+                    "{} event loop heartbeat or channel temporarily closed",
+                    name
+                );
                 // Don't add any sleep here since we already have the timeout in the select
             }
         }
@@ -418,11 +426,8 @@ impl Clone for EventBus {
 mod tests {
     use super::*;
     use crate::event_bus::events::create_handler;
-    use std::sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    };
-    use tokio::time::{sleep, Duration};
+    use std::sync::Arc;
+    use tokio::time::Duration;
 
     #[tokio::test]
     async fn test_event_bus_creation() {
@@ -473,7 +478,9 @@ mod tests {
         // Poll until timeout or success
         while !ui_processed.load(Ordering::SeqCst) && start.elapsed() < timeout {
             // Send again after a delay to increase chances
-            if start.elapsed() > Duration::from_millis(100) && start.elapsed() < Duration::from_millis(200) {
+            if start.elapsed() > Duration::from_millis(100)
+                && start.elapsed() < Duration::from_millis(200)
+            {
                 bus.ui_sender()
                     .send(UiEvent::UserInput("test input".to_string()))
                     .unwrap();
@@ -483,8 +490,10 @@ mod tests {
         }
 
         // Verify event was processed
-        assert!(ui_processed.load(Ordering::SeqCst),
-                "UI event was not processed within timeout");
+        assert!(
+            ui_processed.load(Ordering::SeqCst),
+            "UI event was not processed within timeout"
+        );
     }
 
     /// Test model event handling
@@ -545,7 +554,9 @@ mod tests {
         }
 
         // Verify event was processed
-        assert!(model_processed.load(Ordering::SeqCst),
-                "Model event was not processed within timeout");
+        assert!(
+            model_processed.load(Ordering::SeqCst),
+            "Model event was not processed within timeout"
+        );
     }
 }

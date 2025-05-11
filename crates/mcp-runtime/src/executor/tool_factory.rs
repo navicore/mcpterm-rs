@@ -1,12 +1,10 @@
+use super::ToolExecutor;
 use mcp_tools::{
-    create_tool_manager, create_tool_manager_with_config,
-    default_filesystem_config, default_shell_config,
-    shell::ShellConfig, filesystem::FilesystemConfig,
-    ToolManager
+    create_tool_manager, create_tool_manager_with_config, default_filesystem_config,
+    default_shell_config, filesystem::FilesystemConfig, shell::ShellConfig, ToolManager,
 };
 use std::sync::Arc;
 use tracing::debug;
-use super::ToolExecutor;
 
 /// Factory for creating tool executors with standard tools
 pub struct ToolFactory;

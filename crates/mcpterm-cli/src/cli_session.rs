@@ -1,10 +1,8 @@
 use anyhow::{anyhow, Result};
 use mcp_core::commands::mcp::{ToolInfo, ToolProvider};
 use mcp_llm::{BedrockClient, BedrockConfig, LlmClient};
-use mcp_runtime::{
-    event_bus, ApiEvent, EventBus, ModelEvent, SessionManager, ToolExecutor, UiEvent,
-};
-use mcp_tools::{ToolManager};
+use mcp_runtime::{EventBus, SessionManager, ToolExecutor};
+use mcp_tools::ToolManager;
 use std::sync::Arc;
 use tracing::debug;
 
@@ -100,7 +98,9 @@ impl<L: LlmClient + 'static> CliSession<L> {
         // that includes confirmation logic for each tool.
 
         // Pass our shared tool manager to the ToolExecutor
-        mcp_runtime::executor::ToolFactory::create_executor_with_shared_manager(self.tool_manager.clone())
+        mcp_runtime::executor::ToolFactory::create_executor_with_shared_manager(
+            self.tool_manager.clone(),
+        )
     }
 
     // Initialize the session with the event bus and Session Manager
@@ -216,8 +216,12 @@ impl<L: LlmClient + 'static> CliSession<L> {
         debug!("Set direct model sender in event adapter");
 
         // Verify handler registration
-        debug!("Verification: UI handlers: {}, Model handlers: {}, API handlers: {}",
-               event_bus.ui_handlers(), event_bus.model_handlers(), event_bus.api_handlers());
+        debug!(
+            "Verification: UI handlers: {}, Model handlers: {}, API handlers: {}",
+            event_bus.ui_handlers(),
+            event_bus.model_handlers(),
+            event_bus.api_handlers()
+        );
 
         // Start event distribution once for our shared event bus
         event_bus.start_event_distribution()?;
@@ -231,85 +235,6 @@ impl<L: LlmClient + 'static> CliSession<L> {
             )
         });
         self.event_adapter = Some(event_adapter);
-
-        Ok(())
-    }
-
-    // Create a bidirectional bridge between two event buses
-    fn bridge_event_buses(&self, bus1: &EventBus, bus2: &EventBus) -> Result<()> {
-        // Create handlers that forward events from bus1 to bus2
-        let bus2_ui_tx = bus2.ui_sender();
-        let bus2_model_tx = bus2.model_sender();
-        let bus2_api_tx = bus2.api_sender();
-
-        // Forward UI events from bus1 to bus2
-        let ui_forward_handler = event_bus::create_handler(move |event: UiEvent| {
-            let bus2_ui_tx = bus2_ui_tx.clone();
-            Box::pin(async move {
-                let _ = bus2_ui_tx.send(event);
-                Ok(())
-            })
-        });
-        bus1.register_ui_handler(ui_forward_handler)?;
-
-        // Forward Model events from bus1 to bus2
-        let model_forward_handler = event_bus::create_handler(move |event: ModelEvent| {
-            let bus2_model_tx = bus2_model_tx.clone();
-            Box::pin(async move {
-                let _ = bus2_model_tx.send(event);
-                Ok(())
-            })
-        });
-        bus1.register_model_handler(model_forward_handler)?;
-
-        // Forward API events from bus1 to bus2
-        let api_forward_handler = event_bus::create_handler(move |event: ApiEvent| {
-            let bus2_api_tx = bus2_api_tx.clone();
-            Box::pin(async move {
-                let _ = bus2_api_tx.send(event);
-                Ok(())
-            })
-        });
-        bus1.register_api_handler(api_forward_handler)?;
-
-        // Now create handlers that forward events from bus2 to bus1
-        let bus1_ui_tx = bus1.ui_sender();
-        let bus1_model_tx = bus1.model_sender();
-        let bus1_api_tx = bus1.api_sender();
-
-        // Forward UI events from bus2 to bus1
-        let ui_backward_handler = event_bus::create_handler(move |event: UiEvent| {
-            let bus1_ui_tx = bus1_ui_tx.clone();
-            Box::pin(async move {
-                let _ = bus1_ui_tx.send(event);
-                Ok(())
-            })
-        });
-        bus2.register_ui_handler(ui_backward_handler)?;
-
-        // Forward Model events from bus2 to bus1
-        let model_backward_handler = event_bus::create_handler(move |event: ModelEvent| {
-            let bus1_model_tx = bus1_model_tx.clone();
-            Box::pin(async move {
-                let _ = bus1_model_tx.send(event);
-                Ok(())
-            })
-        });
-        bus2.register_model_handler(model_backward_handler)?;
-
-        // Forward API events from bus2 to bus1
-        let api_backward_handler = event_bus::create_handler(move |event: ApiEvent| {
-            let bus1_api_tx = bus1_api_tx.clone();
-            Box::pin(async move {
-                let _ = bus1_api_tx.send(event);
-                Ok(())
-            })
-        });
-        bus2.register_api_handler(api_backward_handler)?;
-
-        // Start both event buses
-        bus1.start_event_distribution()?;
-        bus2.start_event_distribution()?;
 
         Ok(())
     }

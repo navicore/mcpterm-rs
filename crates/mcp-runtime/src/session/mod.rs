@@ -101,10 +101,16 @@ impl<L: LlmClient + 'static> SessionManager<L> {
         let model_handler = self.create_model_handler();
         // Log handler counts for debugging
         let model_handlers_count_before = self.event_bus.model_handlers();
-        debug!("Model handlers before registration: {}", model_handlers_count_before);
+        debug!(
+            "Model handlers before registration: {}",
+            model_handlers_count_before
+        );
         self.event_bus.register_model_handler(model_handler)?;
         let model_handlers_count_after = self.event_bus.model_handlers();
-        debug!("Model handlers after registration: {}", model_handlers_count_after);
+        debug!(
+            "Model handlers after registration: {}",
+            model_handlers_count_after
+        );
 
         // API event handler
         let api_handler = self.create_api_handler();
@@ -189,7 +195,10 @@ impl<L: LlmClient + 'static> SessionManager<L> {
             Box::pin(async move {
                 match event {
                     ModelEvent::ProcessUserMessage(message) => {
-                        debug!("Processing user message: {} in SessionManager model event handler", message);
+                        debug!(
+                            "Processing user message: {} in SessionManager model event handler",
+                            message
+                        );
 
                         // Get conversation context
                         let context = match session.get_context().read() {
@@ -427,7 +436,8 @@ impl<L: LlmClient + 'static> SessionManager<L> {
                     if let Some(method) = json_obj.get("method").and_then(|v| v.as_str()) {
                         if method == "mcp.tool_call" {
                             if let Some(params) = json_obj.get("params") {
-                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str()) {
+                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str())
+                                {
                                     if let Some(parameters) = params.get("parameters") {
                                         debug!("Executing tool call from JSON-RPC: {}", tool_name);
 
@@ -457,7 +467,7 @@ impl<L: LlmClient + 'static> SessionManager<L> {
                                                 });
                                                 let _ = model_tx.send(ModelEvent::ToolResult(
                                                     tool_name.to_string(),
-                                                    error_value
+                                                    error_value,
                                                 ));
                                             }
                                         }
@@ -480,7 +490,6 @@ impl<L: LlmClient + 'static> SessionManager<L> {
 
         Ok(())
     }
-
 
     // Process a full response from the LLM
     async fn process_llm_response(
@@ -547,7 +556,8 @@ impl<L: LlmClient + 'static> SessionManager<L> {
                     if let Some(method) = json_obj.get("method").and_then(|v| v.as_str()) {
                         if method == "mcp.tool_call" {
                             if let Some(params) = json_obj.get("params") {
-                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str()) {
+                                if let Some(tool_name) = params.get("name").and_then(|v| v.as_str())
+                                {
                                     if let Some(parameters) = params.get("parameters") {
                                         debug!("Executing tool call from JSON-RPC: {}", tool_name);
 
@@ -577,7 +587,7 @@ impl<L: LlmClient + 'static> SessionManager<L> {
                                                 });
                                                 let _ = model_tx.send(ModelEvent::ToolResult(
                                                     tool_name.to_string(),
-                                                    error_value
+                                                    error_value,
                                                 ));
                                             }
                                         }

@@ -18,7 +18,9 @@ pub struct ToolExecutor {
 impl ToolExecutor {
     pub fn new(tool_manager: ToolManager) -> Self {
         debug!("Creating new tool executor");
-        Self { tool_manager: Arc::new(tool_manager) }
+        Self {
+            tool_manager: Arc::new(tool_manager),
+        }
     }
 
     pub fn with_shared_manager(tool_manager: Arc<ToolManager>) -> Self {
@@ -45,12 +47,22 @@ impl ToolExecutor {
         debug!("Applying tool safety constraints for: {}", tool_id);
 
         // Get the number of tools registered
-        debug!("Tool manager has {} tools registered", self.tool_manager.get_tools().len());
+        debug!(
+            "Tool manager has {} tools registered",
+            self.tool_manager.get_tools().len()
+        );
 
         // List available tools for debugging
         let tools = self.tool_manager.get_tools();
         if !tools.is_empty() {
-            debug!("Available tools: {}", tools.iter().map(|t| t.id.clone()).collect::<Vec<_>>().join(", "));
+            debug!(
+                "Available tools: {}",
+                tools
+                    .iter()
+                    .map(|t| t.id.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         } else {
             debug!("No tools are registered in the tool manager!");
         }
@@ -64,9 +76,19 @@ impl ToolExecutor {
 
         match result {
             Ok(result) => {
-                if result.status == mcp_tools::ToolStatus::Failure && result.error.as_deref() == Some(&format!("Tool '{}' not found", tool_id)) {
-                    error!("Tool '{}' not found. Available tools: {}", tool_id,
-                           self.tool_manager.get_tools().iter().map(|t| t.id.clone()).collect::<Vec<_>>().join(", "));
+                if result.status == mcp_tools::ToolStatus::Failure
+                    && result.error.as_deref() == Some(&format!("Tool '{}' not found", tool_id))
+                {
+                    error!(
+                        "Tool '{}' not found. Available tools: {}",
+                        tool_id,
+                        self.tool_manager
+                            .get_tools()
+                            .iter()
+                            .map(|t| t.id.clone())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
                 } else {
                     debug!("Tool {} executed successfully", tool_id);
                     trace!("Tool result: {:?}", result);
@@ -106,11 +128,33 @@ mod tests {
         assert!(!tools.is_empty());
 
         // Verify at least one of each tool type is registered
-        assert!(tools.iter().any(|t| t.category == mcp_tools::ToolCategory::Shell), "Shell tool not found");
-        assert!(tools.iter().any(|t| t.category == mcp_tools::ToolCategory::Filesystem), "Filesystem tool not found");
-        assert!(tools.iter().any(|t| t.category == mcp_tools::ToolCategory::Search), "Search tool not found");
+        assert!(
+            tools
+                .iter()
+                .any(|t| t.category == mcp_tools::ToolCategory::Shell),
+            "Shell tool not found"
+        );
+        assert!(
+            tools
+                .iter()
+                .any(|t| t.category == mcp_tools::ToolCategory::Filesystem),
+            "Filesystem tool not found"
+        );
+        assert!(
+            tools
+                .iter()
+                .any(|t| t.category == mcp_tools::ToolCategory::Search),
+            "Search tool not found"
+        );
 
         // Debug output of registered tools
-        println!("Registered tools: {}", tools.iter().map(|t| t.id.clone()).collect::<Vec<_>>().join(", "));
+        println!(
+            "Registered tools: {}",
+            tools
+                .iter()
+                .map(|t| t.id.clone())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 }

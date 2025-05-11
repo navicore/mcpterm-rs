@@ -3,33 +3,22 @@ use clap::Parser;
 use futures::{Stream, StreamExt};
 use mcp_core::commands::mcp::{ToolInfo, ToolProvider};
 use mcp_core::context::{ConversationContext, MessageRole};
-use mcp_core::{
-    api_log, debug_log, init_tracing, set_verbose_logging, Config, SlashCommand, ValidationResult,
-};
+use mcp_core::{api_log, debug_log, SlashCommand, ValidationResult};
 use mcp_llm::{BedrockClient, BedrockConfig, LlmClient, StreamChunk};
-use mcp_metrics::{count, gauge, time, LogDestination, MetricsDestination, MetricsRegistry};
-use mcp_tools::{
-    analysis::LanguageAnalyzerTool,
-    filesystem::{FilesystemConfig, ListDirectoryTool, ReadFileTool, WriteFileTool},
-    search::{FindConfig, FindTool, GrepConfig, GrepTool},
-    shell::{ShellConfig, ShellTool},
-    testing::TestRunnerTool,
-    ToolManager, ToolResult, ToolStatus,
-};
+use mcp_metrics::{count, gauge, time};
+use mcp_tools::{ToolManager, ToolResult, ToolStatus};
 use serde_json::Value;
 use std::fmt::Display;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::time::sleep;
-use tracing::{debug, error, trace};
+use tracing::{debug, error};
 
+pub mod cli_session;
+pub mod event_adapter;
 pub mod formatter;
 pub mod json_filter;
 pub mod mock;
-pub mod cli_session;
-pub mod event_adapter;
 pub mod run;
 
 #[derive(Parser)]

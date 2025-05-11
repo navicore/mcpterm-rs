@@ -9,7 +9,9 @@ use tracing::debug;
 pub struct CliEventAdapter {
     event_bus: EventBus,
     ui_tx: Sender<UiEvent>,
+    #[allow(dead_code)]
     model_tx: Sender<ModelEvent>,
+    #[allow(dead_code)]
     api_tx: Sender<ApiEvent>,
     direct_model_tx: Option<Sender<ModelEvent>>, // Direct model sender from session manager
     response_buffer: Arc<Mutex<String>>,
@@ -96,9 +98,14 @@ impl CliEventAdapter {
         // This ensures the message gets processed even if UI->Model routing fails
         if let Some(direct_model_tx) = &self.direct_model_tx {
             debug!("Sending user message directly to model channel (via direct sender)");
-            if let Err(e) = direct_model_tx.send(ModelEvent::ProcessUserMessage(message.to_string())) {
+            if let Err(e) =
+                direct_model_tx.send(ModelEvent::ProcessUserMessage(message.to_string()))
+            {
                 // This is a critical error since this is our main path
-                return Err(anyhow::anyhow!("Failed to send message to model channel: {}", e));
+                return Err(anyhow::anyhow!(
+                    "Failed to send message to model channel: {}",
+                    e
+                ));
             }
             debug!("Successfully sent user message to model channel via direct sender");
         } else {
@@ -107,7 +114,10 @@ impl CliEventAdapter {
             let model_tx = self.event_bus.model_sender();
             if let Err(e) = model_tx.send(ModelEvent::ProcessUserMessage(message.to_string())) {
                 // This is a critical error since this is our main path
-                return Err(anyhow::anyhow!("Failed to send message to model channel: {}", e));
+                return Err(anyhow::anyhow!(
+                    "Failed to send message to model channel: {}",
+                    e
+                ));
             }
             debug!("Successfully sent user message to model channel via event bus");
         }
@@ -130,7 +140,10 @@ impl CliEventAdapter {
 
     /// Wait for and collect a response with improved reliability
     pub fn wait_for_response(&self, timeout_seconds: u64) -> Result<String> {
-        debug!("Starting wait_for_response with timeout of {} seconds", timeout_seconds);
+        debug!(
+            "Starting wait_for_response with timeout of {} seconds",
+            timeout_seconds
+        );
 
         // Set up a channel to signal completion
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
@@ -186,7 +199,10 @@ impl CliEventAdapter {
 
         // Register this completion handler for this specific response
         if let Err(e) = self.event_bus.register_model_handler(completion_handler) {
-            return Err(anyhow::anyhow!("Failed to register completion handler: {}", e));
+            return Err(anyhow::anyhow!(
+                "Failed to register completion handler: {}",
+                e
+            ));
         }
 
         debug!("Registered completion handler successfully");
@@ -218,7 +234,9 @@ impl CliEventAdapter {
                             if let Ok(mut guard) = timer_tx.lock() {
                                 if let Some(tx) = guard.take() {
                                     let _ = tx.send(());
-                                    debug!("Sent completion signal from timer due to non-empty buffer");
+                                    debug!(
+                                        "Sent completion signal from timer due to non-empty buffer"
+                                    );
                                     break;
                                 }
                             }
@@ -303,7 +321,10 @@ impl CliEventAdapter {
         };
 
         if !buffer.is_empty() {
-            debug!("Returning non-empty response buffer of length {}", buffer.len());
+            debug!(
+                "Returning non-empty response buffer of length {}",
+                buffer.len()
+            );
             Ok(buffer)
         } else if is_timeout {
             debug!("No response received within timeout");

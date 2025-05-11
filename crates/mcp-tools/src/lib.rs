@@ -14,9 +14,8 @@ pub mod testing;
 
 // Re-export tool registry functions
 pub use registry::{
-    create_tool_manager, create_tool_manager_with_config,
-    default_filesystem_config, default_shell_config,
-    register_standard_tools
+    create_tool_manager, create_tool_manager_with_config, default_filesystem_config,
+    default_shell_config, register_standard_tools,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
