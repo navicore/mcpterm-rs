@@ -552,6 +552,7 @@ use mcp_llm::client_trait::LlmClient;
 use mcp_runtime::ToolExecutor;
 use std::sync::Arc;
 
+#[allow(dead_code)]
 pub struct App {
     context: ConversationContext,
     llm_client: Option<Arc<dyn LlmClient>>,
