@@ -2,12 +2,51 @@ use anyhow::Result;
 use mcp_metrics::{count, time};
 use mcp_tools::{ToolManager, ToolResult};
 use serde_json::Value;
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, error, trace};
-
-// Import the tool factory
 mod tool_factory;
 pub use tool_factory::ToolFactory;
+
+// Global set to track which tools have been executed, to prevent duplicates
+lazy_static::lazy_static! {
+    static ref EXECUTED_TOOLS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
+    // Track currently executing tools to prevent re-entrance
+    static ref CURRENTLY_EXECUTING_TOOLS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
+}
+
+/// Clears the list of executed tools, typically at the start of a new conversation
+pub fn clear_executed_tools() {
+    // Clear executed tools history
+    {
+        let mut executed = EXECUTED_TOOLS.lock().unwrap();
+        executed.clear();
+    }
+
+    // Also clear currently executing tools to prevent deadlocks or hanging tools
+    {
+        let mut currently_executing = CURRENTLY_EXECUTING_TOOLS.lock().unwrap();
+        currently_executing.clear();
+    }
+
+    debug!("Cleared all tool tracking caches");
+}
+
+/// No longer does duplicate detection since that caused more problems than it solved.
+/// Now simply returns true to always execute the tool.
+pub fn should_execute_tool(_tool_id: &str, _params: &Value) -> bool {
+    // Always execute the tool - no duplicate detection
+    // This ensures every tool call is processed, even if it looks like a duplicate
+    // We've fixed the root cause (re-prompting) so duplicates shouldn't occur anymore
+
+    // First ensure we don't leave any orphaned entries in the currently executing set
+    let mut currently_executing = CURRENTLY_EXECUTING_TOOLS.lock().unwrap();
+    // Clear the currently executing set just to be safe
+    currently_executing.clear();
+
+    debug!("Executing tool call without duplicate detection");
+    return true;
+}
 
 // Coordinates execution of tools with safety constraints
 pub struct ToolExecutor {
@@ -37,6 +76,23 @@ impl ToolExecutor {
     pub async fn execute_tool(&self, tool_id: &str, params: Value) -> Result<ToolResult> {
         debug!("Executing tool: {}", tool_id);
         trace!("Tool parameters: {}", params);
+
+        // No more duplicate detection - it caused more problems than it solved
+        // The root cause (re-prompting) has been fixed so duplicates shouldn't occur
+        debug!("Executing tool without duplicate checking: {}", tool_id);
+
+        // Still log potentially problematic creation commands to help with debugging
+        if tool_id == "shell" || tool_id == "command" {
+            if let Some(command) = params.get("command").and_then(Value::as_str) {
+                if command.contains("cargo new")
+                    || command.contains("mkdir")
+                    || command.contains("npm init")
+                    || command.contains("create-react-app")
+                {
+                    debug!("CREATION COMMAND BEING EXECUTED: {}", command);
+                }
+            }
+        }
 
         // Count tool executions
         count!("tool.executions.total");
