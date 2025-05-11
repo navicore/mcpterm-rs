@@ -468,18 +468,16 @@ impl CliApp {
                             // Let the streaming process handle it
                             Ok(response_content)
                         } else if json.get("result").is_some() && !self.has_recent_tool_messages() {
-                            // This is a valid text response with no tool call - we need to automatically follow up
-                            debug_log("Response is a valid text response with no tool call - sending a follow-up");
+                            // This is a valid text response with no tool call
+                            // We should NOT automatically follow up with a new user message
+                            // as this creates a new conversation turn
+                            debug_log("Response is a valid text response with no tool call - NOT sending a follow-up");
 
-                            // The LLM gave text but no tool call - we need to continue the conversation
-                            let follow_up_prompt = "Please continue helping the user with their request using appropriate tool calls.";
-                            debug_log(&format!("Sending follow-up prompt: {}", follow_up_prompt));
+                            // Accept the text response without automatically prompting for tool calls
+                            // This lets the conversation flow naturally and avoids duplicated tool calls
 
-                            // Add the follow-up as a user message
-                            self.context.add_user_message(follow_up_prompt);
-
-                            // Get a follow-up response from the LLM
-                            self.get_streaming_follow_up_response().await
+                            // Just return the response content
+                            return Ok(response_content);
                         } else {
                             // Other valid JSON-RPC response
                             Ok(response_content)
@@ -539,15 +537,9 @@ impl CliApp {
                                                     ));
                                                 }
 
-                                                // Follow up with the LLM to continue the conversation
-                                                let follow_up_prompt = "Please continue helping the user with their request based on the tool results.";
-                                                debug_log(&format!(
-                                                    "Sending follow-up prompt: {}",
-                                                    follow_up_prompt
-                                                ));
-
-                                                // Add the follow-up as a user message
-                                                self.context.add_user_message(follow_up_prompt);
+                                                // DO NOT follow up with the LLM with a new user message
+                                                // Let the LLM continue naturally from the tool results
+                                                debug_log("Not sending follow-up prompt - let the LLM continue naturally");
 
                                                 // Get a follow-up response from the LLM
                                                 return self
@@ -893,10 +885,26 @@ impl CliApp {
             return;
         }
 
-        // Attempt to format any JSON-RPC responses
+        // Check if this is a JSON-RPC message that should be suppressed entirely
+        let is_tool_call = content.contains("\"jsonrpc\"") &&
+                           content.contains("\"method\"") &&
+                           content.contains("\"mcp.tool_call\"");
+
+        if is_tool_call {
+            debug!("Suppressing tool call message from user display");
+            return;
+        }
+
+        // Attempt to format any JSON-RPC responses, removing all JSON content
         let formatted = formatter::format_llm_response(content);
-        print!("{}", formatted);
-        let _ = std::io::stdout().flush();
+
+        // Only print if we have non-empty content after filtering
+        if !formatted.is_empty() {
+            print!("{}", formatted);
+            let _ = std::io::stdout().flush();
+        } else {
+            debug!("Suppressed empty content after JSON filtering");
+        }
     }
 
     // Function to handle non-streaming responses
@@ -941,12 +949,12 @@ impl CliApp {
 
     // Helper method to get a follow-up response after tool execution
     async fn get_tool_result_follow_up(&mut self) -> Result<String> {
-        // Add message asking for a follow-up
-        debug_log("Getting follow-up response after tool execution");
-        self.context
-            .add_user_message("Please continue with your response based on the tool results.");
+        // DO NOT add a user message asking for a follow-up
+        // This causes the LLM to treat it as a new conversation turn
+        // Instead, let the LLM continue naturally from the tool results
+        debug_log("Getting follow-up response after tool execution without adding user message");
 
-        // Get the follow-up response
+        // Get the follow-up response - the LLM will see the tool results already in the context
         let client = self.llm_client.as_ref().unwrap();
         let follow_up_result = client.send_message(&self.context).await?;
         debug_log(&format!(
@@ -1401,9 +1409,9 @@ impl CliApp {
                 if has_tool_call || had_tool_call {
                     debug_log("Tool call detected and executed, getting another follow-up");
 
-                    // Add a message asking for continuation
-                    self.context
-                        .add_user_message("Please continue helping the user with their request.");
+                    // DO NOT add a message asking for continuation
+                    // Let the LLM continue naturally from the tool results
+                    debug_log("Not sending follow-up prompt - let the LLM continue naturally");
 
                     // Recursively get another follow-up response
                     let recursive_response = self.get_streaming_follow_up_response().await?;
