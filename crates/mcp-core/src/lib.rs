@@ -12,7 +12,7 @@ pub use commands::{
 };
 pub use config::Config;
 pub use context::ConversationContext;
-pub use jsonrpc::{extract_jsonrpc_objects, extract_jsonrpc_objects_with_positions};
+pub use jsonrpc::extract_jsonrpc_objects;
 pub use logging::tracing::{get_log_level, init_tracing};
 pub use logging::{api_log, debug_log, init_debug_log, set_verbose_logging, ui_log};
 pub use prompts::{PromptManager, PromptType};

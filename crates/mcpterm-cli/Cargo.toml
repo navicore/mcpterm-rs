@@ -30,6 +30,3 @@ tokio-stream = { version = "0.1" }
 
 # For terminal color support detection
 atty = "0.2"
-
-# For channels in event bus
-crossbeam-channel = "0.5"

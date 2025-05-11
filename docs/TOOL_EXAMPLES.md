@@ -1,8 +1,6 @@
 # MCP Tool Examples
 
-This document provides examples of how to use the tools in the MCPTerm application. For details on the tool architecture and implementation, see [TOOL_IMPLEMENTATION.md](TOOL_IMPLEMENTATION.md).
-
-Tools are called using the JSON-RPC format with the `mcp.tool_call` method.
+This document provides examples of how to use the tools in the mcpterm CLI application.
 
 ## Shell Tool
 
@@ -12,17 +10,11 @@ The shell tool allows execution of commands on the system.
 
 ```json
 {
-  "jsonrpc": "2.0",
-  "method": "mcp.tool_call",
+  "tool": "shell",
   "params": {
-    "name": "shell",
-    "parameters": {
-      "command": "ls -la",
-      "timeout_ms": 5000,
-      "description": "List files in current directory"
-    }
-  },
-  "id": "call1"
+    "command": "ls -la",
+    "timeout_ms": 5000
+  }
 }
 ```
 
@@ -30,16 +22,10 @@ The shell tool allows execution of commands on the system.
 
 ```json
 {
-  "jsonrpc": "2.0",
-  "method": "mcp.tool_call",
+  "tool": "shell",
   "params": {
-    "name": "shell",
-    "parameters": {
-      "command": "uname -a",
-      "description": "Get system information"
-    }
-  },
-  "id": "call2"
+    "command": "uname -a"
+  }
 }
 ```
 
