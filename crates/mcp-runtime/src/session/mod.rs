@@ -5,7 +5,6 @@ use futures::StreamExt;
 use mcp_core::context::ConversationContext;
 use mcp_core::jsonrpc::JsonRpcFilter;
 use mcp_llm::client_trait::{LlmClient, LlmResponse, StreamChunk};
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use tracing::{debug, error};
 use uuid::Uuid;
@@ -35,6 +34,10 @@ impl Session {
 
     pub fn add_user_message(&self, content: &str) {
         if let Ok(mut context) = self.context.write() {
+            // Clear the executed tools cache for a new user message
+            // This ensures that tools can be re-executed in a new conversation turn
+            crate::executor::clear_executed_tools();
+
             context.add_user_message(content);
         }
     }
@@ -65,27 +68,70 @@ impl Default for Session {
 }
 
 // SessionManager handles interactions between the UI, model, and tools
+use std::collections::{HashMap, HashSet};
+
 pub struct SessionManager<L: LlmClient> {
     session: Arc<Session>,
     llm_client: Arc<L>,
     tool_executor: Arc<ToolExecutor>,
     event_bus: Arc<EventBus>,
     active_requests: Arc<Mutex<HashMap<String, bool>>>,
+    // Track executed tool calls to prevent duplicates
+    #[allow(dead_code)]
+    executed_tools: Arc<Mutex<HashSet<String>>>,
 }
 
 impl<L: LlmClient + 'static> SessionManager<L> {
-    pub fn new(llm_client: L, tool_executor: ToolExecutor, event_bus: EventBus) -> Self {
+    // Accept an Arc<EventBus> directly - enforce the singleton pattern
+    pub fn new(llm_client: L, tool_executor: ToolExecutor, event_bus: Arc<EventBus>) -> Self {
         Self {
             session: Arc::new(Session::new()),
             llm_client: Arc::new(llm_client),
             tool_executor: Arc::new(tool_executor),
-            event_bus: Arc::new(event_bus),
+            event_bus, // Already an Arc, no need to wrap again
             active_requests: Arc::new(Mutex::new(HashMap::new())),
+            executed_tools: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
     pub fn get_session(&self) -> Arc<Session> {
         self.session.clone()
+    }
+
+    /// Checks if a tool call has already been executed and tracks new executions
+    /// Returns true if this is a new tool call that hasn't been executed yet
+    #[allow(dead_code)]
+    fn should_execute_tool(
+        &self,
+        tool_name: &str,
+        tool_params: &serde_json::Value,
+        id: &str,
+    ) -> bool {
+        // Create a unique identifier for this tool call (tool name + parameters + id)
+        let tool_call_json = serde_json::json!({
+            "tool": tool_name,
+            "params": tool_params,
+            "id": id
+        });
+
+        // Create a hash of this tool call as our tracking key
+        let tool_call_str = serde_json::to_string(&tool_call_json).unwrap_or_default();
+        let tool_call_hash = format!("{:x}", md5::compute(tool_call_str));
+
+        // Check if we've seen this exact tool call before
+        let mut executed_tools = self.executed_tools.lock().unwrap();
+        if executed_tools.contains(&tool_call_hash) {
+            debug!(
+                "Skipping duplicate tool execution: {} (ID: {})",
+                tool_name, id
+            );
+            return false;
+        }
+
+        // This is a new tool call, add it to our tracking set
+        debug!("New tool execution: {} (ID: {})", tool_name, id);
+        executed_tools.insert(tool_call_hash);
+        true
     }
 
     // Register all event handlers with the event bus
@@ -128,7 +174,7 @@ impl<L: LlmClient + 'static> SessionManager<L> {
 
     // Get event bus instance for testing
     pub fn get_event_bus(&self) -> Arc<EventBus> {
-        self.event_bus.clone()
+        Arc::clone(&self.event_bus)
     }
 
     // Create a handler for UI events
@@ -313,16 +359,49 @@ impl<L: LlmClient + 'static> SessionManager<L> {
                     ModelEvent::ToolResult(tool_id, result) => {
                         debug!("Received tool result from {}: {:?}", tool_id, result);
 
-                        // Format the tool result as a message
-                        let result_str = serde_json::to_string_pretty(&result)
-                            .unwrap_or_else(|_| format!("{:?}", result));
+                        // Create a properly formatted JSON-RPC response for the tool result
+                        // The LLM expects a properly formatted JSON-RPC response for tool results
 
-                        let tool_message =
-                            format!("Tool '{}' returned result: {}", tool_id, result_str);
+                        // Extract status as a string (ensure it's lowercase)
+                        let status_str = result.get("status")
+                            .and_then(|s| s.as_str())
+                            .map(|s| s.to_lowercase())
+                            .unwrap_or_else(|| "success".to_string());
+
+                        let jsonrpc_response = serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": tool_id,  // Use tool_id as the id for simplicity
+                            "result": {
+                                "tool_id": tool_id,
+                                "status": status_str,
+                                "output": result,
+                                "error": result.get("error").cloned(),
+                            }
+                        });
+
+                        // Convert to a properly formatted string
+                        let tool_message = serde_json::to_string_pretty(&jsonrpc_response)
+                            .unwrap_or_else(|_| {
+                                // Fallback in case serialization fails
+                                error!("Failed to serialize tool result as JSON-RPC");
+                                format!("{{\"jsonrpc\":\"2.0\",\"id\":\"{}\",\"result\":{{\"tool_id\":\"{}\",\"status\":\"success\",\"output\":{{}},\"error\":null}}}}",
+                                    tool_id, tool_id)
+                            });
+
+                        // Add the tool message to the session history
                         session.add_tool_message(&tool_message);
 
-                        // Continue the conversation with the tool result
-                        let _ = model_tx.send(ModelEvent::ProcessUserMessage(String::new()));
+                        // Log that this message was added to help with debugging
+                        debug!("Added tool message to session history: {}", tool_id);
+
+                        // IMPORTANT: This is a tool result, not a tool request
+                        // It should never be treated as a duplicate of a tool request
+                        // Added to highlight the distinction in logs
+                        debug!("TOOL RESULT processed (not a duplicate request): {}", tool_id);
+
+                        // DO NOT continue the conversation with an empty user message!
+                        // This causes recursive loops of tool calls.
+                        // Instead, we'll wait for the LLM to send a final response.
                     }
                     ModelEvent::ResetContext => {
                         debug!("Resetting conversation context");
@@ -400,19 +479,31 @@ impl<L: LlmClient + 'static> SessionManager<L> {
                     .await
                 {
                     Ok(result) => {
+                        // Properly format the tool result as a structured Value
+                        let result_value = serde_json::json!({
+                            "tool_id": tool_call.tool,
+                            "status": format!("{:?}", result.status),
+                            "output": result.output,
+                            "error": result.error
+                        });
+
                         // Send the result back to model
                         let _ = model_tx.send(ModelEvent::ToolResult(
                             tool_call.tool,
-                            serde_json::to_value(result)?,
+                            result_value,
                         ));
                     }
                     Err(e) => {
                         error!("Tool execution error: {:?}", e);
                         // Send error as a result
-                        let error_value = serde_json::json!({
+                        // Properly format the error as a JSON-RPC response
+                        let jsonrpc_error = serde_json::json!({
+                            "tool_id": tool_call.tool,
+                            "status": "failure",
+                            "output": {},
                             "error": e.to_string(),
                         });
-                        let _ = model_tx.send(ModelEvent::ToolResult(tool_call.tool, error_value));
+                        let _ = model_tx.send(ModelEvent::ToolResult(tool_call.tool, jsonrpc_error));
                     }
                 }
             }
@@ -453,21 +544,40 @@ impl<L: LlmClient + 'static> SessionManager<L> {
                                             .await
                                         {
                                             Ok(result) => {
+                                                // Properly format the tool result as a structured Value
+                                                let status_str = match result.status {
+                                                    mcp_tools::ToolStatus::Success => "success",
+                                                    mcp_tools::ToolStatus::Failure => "failure",
+                                                    mcp_tools::ToolStatus::Timeout => "timeout",
+                                                };
+
+                                                let result_value = serde_json::json!({
+                                                    "tool_id": tool_name,
+                                                    "status": status_str,
+                                                    "output": result.output,
+                                                    "error": result.error
+                                                });
+
                                                 // Send the result back to model
                                                 let _ = model_tx.send(ModelEvent::ToolResult(
                                                     tool_name.to_string(),
-                                                    serde_json::to_value(result)?,
+                                                    result_value,
                                                 ));
                                             }
                                             Err(e) => {
                                                 error!("Tool execution error: {:?}", e);
-                                                // Send error as a result
-                                                let error_value = serde_json::json!({
+
+                                                // Properly format the error as a JSON-RPC response
+                                                let jsonrpc_error = serde_json::json!({
+                                                    "tool_id": tool_name,
+                                                    "status": "failure",
+                                                    "output": {},
                                                     "error": e.to_string(),
                                                 });
+
                                                 let _ = model_tx.send(ModelEvent::ToolResult(
                                                     tool_name.to_string(),
-                                                    error_value,
+                                                    jsonrpc_error,
                                                 ));
                                             }
                                         }
@@ -483,8 +593,29 @@ impl<L: LlmClient + 'static> SessionManager<L> {
             // If no filtering was needed, this will be the original content
             if !filtered_content.is_empty() {
                 debug!("Sending user-facing content");
-                session.add_assistant_message(&filtered_content);
-                let _ = model_tx.send(ModelEvent::LlmStreamChunk(filtered_content));
+
+                // Check if the filtered content is a valid JSON fragment by looking for unmatched braces
+                // If it contains unmatched braces, it's likely a partial JSON object that should be suppressed
+                let is_malformed_json = filtered_content.contains('{') != filtered_content.contains('}')
+                    || filtered_content.contains('[') != filtered_content.contains(']');
+
+                // Also check if it's just JSON object or array start/end markers with no content
+                let is_empty_json_markers = filtered_content.trim() == "{}"
+                    || filtered_content.trim() == "[]"
+                    || filtered_content.trim() == "},"
+                    || filtered_content.trim() == "},}"
+                    || filtered_content.trim() == "}"
+                    || filtered_content.trim() == "]";
+
+                if !is_malformed_json && !is_empty_json_markers {
+                    // Only add properly formatted content to the conversation context
+                    session.add_assistant_message(&filtered_content);
+                    let _ = model_tx.send(ModelEvent::LlmStreamChunk(filtered_content));
+                } else {
+                    debug!("Suppressing malformed JSON fragment from context: {}", filtered_content);
+                    // Send the event but don't add it to the conversation context
+                    let _ = model_tx.send(ModelEvent::LlmStreamChunk(filtered_content));
+                }
             }
         }
 
@@ -520,19 +651,31 @@ impl<L: LlmClient + 'static> SessionManager<L> {
                     .await
                 {
                     Ok(result) => {
+                        // Properly format the tool result as a structured Value
+                        let result_value = serde_json::json!({
+                            "tool_id": tool_call.tool,
+                            "status": format!("{:?}", result.status),
+                            "output": result.output,
+                            "error": result.error
+                        });
+
                         // Send the result back to model
                         let _ = model_tx.send(ModelEvent::ToolResult(
                             tool_call.tool,
-                            serde_json::to_value(result)?,
+                            result_value,
                         ));
                     }
                     Err(e) => {
                         error!("Tool execution error: {:?}", e);
                         // Send error as a result
-                        let error_value = serde_json::json!({
+                        // Properly format the error as a JSON-RPC response
+                        let jsonrpc_error = serde_json::json!({
+                            "tool_id": tool_call.tool,
+                            "status": "failure",
+                            "output": {},
                             "error": e.to_string(),
                         });
-                        let _ = model_tx.send(ModelEvent::ToolResult(tool_call.tool, error_value));
+                        let _ = model_tx.send(ModelEvent::ToolResult(tool_call.tool, jsonrpc_error));
                     }
                 }
             }
@@ -573,21 +716,40 @@ impl<L: LlmClient + 'static> SessionManager<L> {
                                             .await
                                         {
                                             Ok(result) => {
+                                                // Properly format the tool result as a structured Value
+                                                let status_str = match result.status {
+                                                    mcp_tools::ToolStatus::Success => "success",
+                                                    mcp_tools::ToolStatus::Failure => "failure",
+                                                    mcp_tools::ToolStatus::Timeout => "timeout",
+                                                };
+
+                                                let result_value = serde_json::json!({
+                                                    "tool_id": tool_name,
+                                                    "status": status_str,
+                                                    "output": result.output,
+                                                    "error": result.error
+                                                });
+
                                                 // Send the result back to model
                                                 let _ = model_tx.send(ModelEvent::ToolResult(
                                                     tool_name.to_string(),
-                                                    serde_json::to_value(result)?,
+                                                    result_value,
                                                 ));
                                             }
                                             Err(e) => {
                                                 error!("Tool execution error: {:?}", e);
-                                                // Send error as a result
-                                                let error_value = serde_json::json!({
+
+                                                // Properly format the error as a JSON-RPC response
+                                                let jsonrpc_error = serde_json::json!({
+                                                    "tool_id": tool_name,
+                                                    "status": "failure",
+                                                    "output": {},
                                                     "error": e.to_string(),
                                                 });
+
                                                 let _ = model_tx.send(ModelEvent::ToolResult(
                                                     tool_name.to_string(),
-                                                    error_value,
+                                                    jsonrpc_error,
                                                 ));
                                             }
                                         }
@@ -602,8 +764,29 @@ impl<L: LlmClient + 'static> SessionManager<L> {
             // Send the filtered content (without JSON-RPC) to the UI
             if !filtered_content.is_empty() {
                 debug!("Sending user-facing content");
-                session.add_assistant_message(&filtered_content);
-                let _ = model_tx.send(ModelEvent::LlmMessage(filtered_content));
+
+                // Check if the filtered content is a valid JSON fragment by looking for unmatched braces
+                // If it contains unmatched braces, it's likely a partial JSON object that should be suppressed
+                let is_malformed_json = filtered_content.contains('{') != filtered_content.contains('}')
+                    || filtered_content.contains('[') != filtered_content.contains(']');
+
+                // Also check if it's just JSON object or array start/end markers with no content
+                let is_empty_json_markers = filtered_content.trim() == "{}"
+                    || filtered_content.trim() == "[]"
+                    || filtered_content.trim() == "},"
+                    || filtered_content.trim() == "},}"
+                    || filtered_content.trim() == "}"
+                    || filtered_content.trim() == "]";
+
+                if !is_malformed_json && !is_empty_json_markers {
+                    // Only add properly formatted content to the conversation context
+                    session.add_assistant_message(&filtered_content);
+                    let _ = model_tx.send(ModelEvent::LlmMessage(filtered_content));
+                } else {
+                    debug!("Suppressing malformed JSON fragment from context: {}", filtered_content);
+                    // Send the event but don't add it to the conversation context
+                    let _ = model_tx.send(ModelEvent::LlmMessage(filtered_content));
+                }
             }
         }
 
