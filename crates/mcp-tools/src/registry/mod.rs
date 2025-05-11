@@ -43,17 +43,14 @@ pub fn default_filesystem_config() -> FilesystemConfig {
             "C:\\Program Files\\".to_string(),
             "C:\\Program Files (x86)\\".to_string(),
         ]),
-        allowed_paths: None, // Allow all paths not explicitly denied
+        allowed_paths: None,             // Allow all paths not explicitly denied
         max_file_size: 10 * 1024 * 1024, // 10 MB max file size
     }
 }
 
 /// Create a tool manager with default configuration
 pub fn create_tool_manager() -> ToolManager {
-    create_tool_manager_with_config(
-        default_shell_config(),
-        default_filesystem_config(),
-    )
+    create_tool_manager_with_config(default_shell_config(), default_filesystem_config())
 }
 
 /// Create a tool manager with custom configuration
