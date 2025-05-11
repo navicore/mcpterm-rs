@@ -537,14 +537,12 @@ impl CliApp {
                                                     ));
                                                 }
 
-                                                // DO NOT follow up with the LLM with a new user message
-                                                // Let the LLM continue naturally from the tool results
-                                                debug_log("Not sending follow-up prompt - let the LLM continue naturally");
+                                                // DO NOT follow up with the LLM with a new user message or get a follow-up response
+                                                // This was causing duplicate tool calls
+                                                debug_log("Tool executed. NOT getting a follow-up response to avoid re-prompting.");
 
-                                                // Get a follow-up response from the LLM
-                                                return self
-                                                    .get_streaming_follow_up_response()
-                                                    .await;
+                                                // Just return the current response without re-prompting
+                                                return Ok(response_content);
                                             }
                                         }
                                     }
@@ -852,11 +850,12 @@ impl CliApp {
                             }
                         }
 
-                        // Check if we had a tool call and need a follow-up
+                        // We DO NOT need to get a follow-up response after a tool call!
+                        // This is the key issue - we were re-prompting the LLM after tool execution
                         if had_tool_call {
-                            // Get a follow-up response with the tool results
-                            let follow_up_result = self.get_streaming_follow_up_response().await?;
-                            return Ok(follow_up_result);
+                            debug_log("Tool execution complete. NOT getting a follow-up response to avoid re-prompting.");
+                            // Just return the current response content - the LLM will continue when it gets the result
+                            return Ok(response_content);
                         }
 
                         break;
@@ -932,8 +931,12 @@ impl CliApp {
             self.process_tool_call(tool_call).await?;
         }
 
-        // Get follow-up response by calling a helper method to avoid borrow checker issues
-        self.get_tool_result_follow_up().await
+        // DO NOT get a follow-up response after executing tools!
+        // This re-prompting the LLM is what caused the duplicate tool call issues
+        debug_log("Tool execution complete. NOT getting a follow-up response to avoid re-prompting.");
+
+        // Return the original response - the LLM will get the tool results in the next turn naturally
+        Ok(response.content)
     }
 
     // Helper method to process a single tool call
@@ -1404,27 +1407,12 @@ impl CliApp {
                 debug!("Adding assistant response to context");
                 self.context.add_assistant_message(&follow_up_content);
 
-                // If we found a tool call in the response, we need to add a tool result message
-                // and then get another follow-up response
+                // If we found a tool call in the response, we should NOT get another follow-up response
+                // This was causing the duplicate tool call issue
                 if has_tool_call || had_tool_call {
-                    debug_log("Tool call detected and executed, getting another follow-up");
+                    debug_log("Tool call detected and executed, NOT getting another follow-up");
 
-                    // DO NOT add a message asking for continuation
-                    // Let the LLM continue naturally from the tool results
-                    debug_log("Not sending follow-up prompt - let the LLM continue naturally");
-
-                    // Recursively get another follow-up response
-                    let recursive_response = self.get_streaming_follow_up_response().await?;
-
-                    // Only combine responses if the recursive response is not empty
-                    if !recursive_response.is_empty() {
-                        let mut combined_response = follow_up_content;
-                        combined_response.push_str("\n\n");
-                        combined_response.push_str(&recursive_response);
-                        return Ok(combined_response);
-                    }
-
-                    // Otherwise just return the current response
+                    // Just return the current follow-up content without re-prompting
                     return Ok(follow_up_content);
                 }
 
