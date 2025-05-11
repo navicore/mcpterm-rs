@@ -1,15 +1,15 @@
 //! JSON-RPC utility functions for MCP
 
 pub mod extractor;
-pub mod splitter;
 pub mod filter;
+pub mod splitter;
 
 pub use extractor::extract_jsonrpc_objects;
-pub use splitter::{split_jsonrpc_and_text, SplitContent};
 pub use filter::JsonRpcFilter;
+pub use splitter::{split_jsonrpc_and_text, SplitContent};
 
-use serde_json::Value;
 use anyhow::Result;
+use serde_json::Value;
 
 /// Extract JSON-RPC objects and their positions from text
 ///

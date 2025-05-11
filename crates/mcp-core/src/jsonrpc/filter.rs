@@ -25,10 +25,11 @@ impl JsonRpcFilter {
         }
 
         // Simple test case handling for the write_file tool command
-        if content.contains("jsonrpc") &&
-           content.contains("method") &&
-           content.contains("mcp.tool_call") &&
-           content.contains("write_file") {
+        if content.contains("jsonrpc")
+            && content.contains("method")
+            && content.contains("mcp.tool_call")
+            && content.contains("write_file")
+        {
             // This matches our test case directly
             return content.replace(
                 r#"{"jsonrpc":"2.0","method":"mcp.tool_call","params":{"name":"write_file","parameters":{"file_path":"/path/to/file.txt","content":"content"}},"id":"1"}"#,
@@ -50,10 +51,10 @@ impl JsonRpcFilter {
             let end = match_info.end();
 
             // Look for JSON-RPC indicators
-            if matched_str.contains("jsonrpc") &&
-               matched_str.contains("method") &&
-               matched_str.contains("mcp.tool_call") {
-
+            if matched_str.contains("jsonrpc")
+                && matched_str.contains("method")
+                && matched_str.contains("mcp.tool_call")
+            {
                 // Try to parse as JSON
                 match serde_json::from_str::<Value>(matched_str) {
                     Ok(json) => {
@@ -70,9 +71,10 @@ impl JsonRpcFilter {
                     }
                     Err(_) => {
                         // Invalid JSON but looks like a tool call
-                        if matched_str.contains("\"jsonrpc\"") &&
-                           matched_str.contains("\"method\"") &&
-                           matched_str.contains("\"mcp.tool_call\"") {
+                        if matched_str.contains("\"jsonrpc\"")
+                            && matched_str.contains("\"method\"")
+                            && matched_str.contains("\"mcp.tool_call\"")
+                        {
                             let replacement = "[Invalid tool command detected]";
                             filtered_content.replace_range(start..end, replacement);
                             start_idx = start + replacement.len();
