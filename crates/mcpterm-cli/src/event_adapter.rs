@@ -7,7 +7,7 @@ use tracing::debug;
 
 /// The CliEventAdapter bridges the CLI interface with the event bus architecture
 pub struct CliEventAdapter {
-    event_bus: EventBus,
+    event_bus: Arc<EventBus>,
     ui_tx: Sender<UiEvent>,
     #[allow(dead_code)]
     model_tx: Sender<ModelEvent>,
@@ -20,8 +20,8 @@ pub struct CliEventAdapter {
 
 impl CliEventAdapter {
     /// Create a new CLI adapter with the provided event bus
-    pub fn new(event_bus: EventBus, interactive_mode: bool) -> Self {
-        // Store a clone of the event bus to maintain shared channels
+    pub fn new(event_bus: Arc<EventBus>, interactive_mode: bool) -> Self {
+        // Get channel senders from the shared event bus
         let ui_tx = event_bus.ui_sender();
         let model_tx = event_bus.model_sender();
         let api_tx = event_bus.api_sender();
@@ -53,15 +53,15 @@ impl CliEventAdapter {
         let api_handler = self.create_api_event_handler();
         self.event_bus.register_api_handler(api_handler)?;
 
-        // Start the event distribution
-        self.event_bus.start_event_distribution()?;
+        // NOTE: Do not start event distribution here!
+        // It will be started in the higher-level CliSession to avoid duplicate event processing
 
         Ok(())
     }
 
-    /// Get the underlying event bus
-    pub fn get_event_bus(&self) -> EventBus {
-        self.event_bus.clone()
+    /// Get the underlying event bus (returns the Arc reference)
+    pub fn get_event_bus(&self) -> Arc<EventBus> {
+        Arc::clone(&self.event_bus)
     }
 
     /// Set a direct model sender from the session manager
@@ -85,44 +85,46 @@ impl CliEventAdapter {
             *buffer = String::new();
         }
 
-        // First, try to send to the UI channel to follow normal event flow
+        // IMPORTANT: Only send the message through ONE path to avoid duplicates
+        // We'll try the UI channel first (the proper way), and only fall back to direct model
+        // channel if the UI channel fails
+
+        // Try to send to the UI channel to follow normal event flow
         debug!("Sending user input to UI event channel");
         if let Err(e) = self.ui_tx.send(UiEvent::UserInput(message.to_string())) {
             debug!("Failed to send to UI channel: {}", e);
-            // Continue on error, we'll try direct model channel next
+
+            // UI channel failed, now try the direct model channel as a fallback
+            if let Some(direct_model_tx) = &self.direct_model_tx {
+                debug!("Sending user message directly to model channel (via direct sender)");
+                if let Err(e) =
+                    direct_model_tx.send(ModelEvent::ProcessUserMessage(message.to_string()))
+                {
+                    // This is a critical error since this is our last resort
+                    return Err(anyhow::anyhow!(
+                        "Failed to send message to model channel: {}",
+                        e
+                    ));
+                }
+                debug!("Successfully sent user message to model channel via direct sender");
+            } else {
+                // No direct model sender, try regular event bus model sender
+                debug!("No direct model sender available, using event bus model sender");
+                let model_tx = self.event_bus.model_sender();
+                if let Err(e) = model_tx.send(ModelEvent::ProcessUserMessage(message.to_string())) {
+                    // This is a critical error since it's our last resort
+                    return Err(anyhow::anyhow!(
+                        "Failed to send message to model channel: {}",
+                        e
+                    ));
+                }
+                debug!("Successfully sent user message to model channel via event bus");
+            }
         } else {
-            debug!("Successfully sent user input to UI channel");
+            debug!("Successfully sent user input to UI channel - NOT sending to model channel to avoid duplicates");
         }
 
-        // For reliability, send directly to model channel as well
-        // This ensures the message gets processed even if UI->Model routing fails
-        if let Some(direct_model_tx) = &self.direct_model_tx {
-            debug!("Sending user message directly to model channel (via direct sender)");
-            if let Err(e) =
-                direct_model_tx.send(ModelEvent::ProcessUserMessage(message.to_string()))
-            {
-                // This is a critical error since this is our main path
-                return Err(anyhow::anyhow!(
-                    "Failed to send message to model channel: {}",
-                    e
-                ));
-            }
-            debug!("Successfully sent user message to model channel via direct sender");
-        } else {
-            // Fallback to regular event bus model sender
-            debug!("No direct model sender available, using event bus model sender");
-            let model_tx = self.event_bus.model_sender();
-            if let Err(e) = model_tx.send(ModelEvent::ProcessUserMessage(message.to_string())) {
-                // This is a critical error since this is our main path
-                return Err(anyhow::anyhow!(
-                    "Failed to send message to model channel: {}",
-                    e
-                ));
-            }
-            debug!("Successfully sent user message to model channel via event bus");
-        }
-
-        debug!("Successfully sent user message through all available channels");
+        debug!("Successfully sent user message through exactly one channel");
         Ok(())
     }
 
@@ -346,6 +348,10 @@ impl CliEventAdapter {
             Box::pin(async move {
                 match event {
                     ModelEvent::LlmMessage(content) => {
+                        // TODO: We should also display LLM messages about what tools it's about to use,
+                        // not just the results. This would help users understand what the model is doing.
+                        // These messages should not be filtered out if they discuss tool usage plans.
+
                         // Store the message in the response buffer
                         {
                             let mut buffer = response_buffer.lock().unwrap();
@@ -380,6 +386,67 @@ impl CliEventAdapter {
                     ModelEvent::ToolRequest(tool_id, params) => {
                         debug!("Tool request: {} with params: {:?}", tool_id, params);
                         // Tool calls are handled by the SessionManager
+                    }
+                    ModelEvent::ToolResult(tool_id, result) => {
+                        debug!("Tool result: {} with result: {:?}", tool_id, result);
+
+                        // Skip displaying results for invalid tool commands
+                        if tool_id == "unknown" && result.get("error").is_some() {
+                            debug!("Skipping display of invalid tool command result");
+                            return Ok(());
+                        }
+
+                        // Also skip displaying internal error messages that aren't user-friendly
+                        if let Some(error) = result.get("error").and_then(|e| e.as_str()) {
+                            // Only filter out specific technical error messages, not all errors
+                            if (error.contains("[Invalid tool command detected]") && error.trim() == "[Invalid tool command detected]") ||
+                               (error.contains("[Invalid JSON format in tool command]") && error.trim() == "[Invalid JSON format in tool command]") ||
+                               error.contains("[Tool command with invalid JSON:") {
+                                debug!("Skipping display of internal error message: {}", error);
+                                return Ok(());
+                            }
+
+                            // Don't filter out errors with meaningful content
+                            debug!("Displaying meaningful error message: {}", error);
+                        }
+
+                        // Check if this is a skipped duplicate result
+                        if let Some(skipped) = result.get("skipped").and_then(|s| s.as_bool()) {
+                            if skipped {
+                                debug!("Detected skipped duplicate tool execution: {}", tool_id);
+                                if interactive_mode {
+                                    println!("Note: Skipped duplicate execution of tool '{}'", tool_id);
+                                }
+                                return Ok(());
+                            }
+                        }
+
+                        // Convert the result to a ToolResult struct for formatting
+                        let tool_result = mcp_tools::ToolResult {
+                            tool_id: tool_id.clone(),
+                            status: if result.get("error").is_some() {
+                                mcp_tools::ToolStatus::Failure
+                            } else {
+                                mcp_tools::ToolStatus::Success
+                            },
+                            output: result.clone(),
+                            error: result.get("error").and_then(|e| e.as_str()).map(String::from),
+                        };
+
+                        // Format the tool result
+                        let formatted = crate::formatter::ResponseFormatter::format_tool_result(&tool_result);
+
+                        // In interactive mode, display immediately
+                        if interactive_mode {
+                            println!("{}", formatted);
+                        } else {
+                            // In non-interactive mode, append to the response buffer
+                            let mut buffer = response_buffer.lock().unwrap();
+                            if !buffer.is_empty() {
+                                buffer.push_str("\n\n");
+                            }
+                            buffer.push_str(&formatted);
+                        }
                     }
                     _ => {
                         // Other events are handled elsewhere
