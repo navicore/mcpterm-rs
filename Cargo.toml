@@ -31,7 +31,7 @@ arboard = "3.5.0"
 
 # AWS SDK for Bedrock
 aws-config = "1.1.1"
-aws-sdk-bedrockruntime = "1.5.0"
+aws-sdk-bedrockruntime = "1.87.0"
 aws-smithy-runtime-api = "1.1.1"
 aws-smithy-types = "1.1.1"
 
