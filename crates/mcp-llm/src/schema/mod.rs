@@ -1,5 +1,5 @@
 use anyhow::Result;
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{Draft, Validator};
 use mcp_core::prompts::PromptManager;
 use serde_json::json;
 use thiserror::Error;
@@ -15,9 +15,9 @@ pub enum SchemaError {
 
 /// MCP Schema Manager is responsible for storing and validating against MCP JSON schemas
 pub struct McpSchemaManager {
-    request_schema: JSONSchema,
-    response_schema: JSONSchema,
-    tool_call_schema: JSONSchema,
+    request_schema: Validator,
+    response_schema: Validator,
+    tool_call_schema: Validator,
     prompt_manager: PromptManager,
 }
 
@@ -139,10 +139,10 @@ impl McpSchemaManager {
     }
 
     // Compile a schema from JSON
-    fn compile_schema(schema_json: serde_json::Value) -> Result<JSONSchema, SchemaError> {
-        JSONSchema::options()
+    fn compile_schema(schema_json: serde_json::Value) -> Result<Validator, SchemaError> {
+        Validator::options()
             .with_draft(Draft::Draft7)
-            .compile(&schema_json)
+            .build(&schema_json)
             .map_err(|e| SchemaError::CompilationError(e.to_string()))
     }
 
@@ -150,10 +150,7 @@ impl McpSchemaManager {
     pub fn validate_request(&self, request_json: &serde_json::Value) -> Result<(), SchemaError> {
         self.request_schema
             .validate(request_json)
-            .map_err(|errors| {
-                let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-                SchemaError::ValidationError(error_messages.join(", "))
-            })?;
+            .map_err(|error| SchemaError::ValidationError(error.to_string()))?;
         Ok(())
     }
 
@@ -161,10 +158,7 @@ impl McpSchemaManager {
     pub fn validate_response(&self, response_json: &serde_json::Value) -> Result<(), SchemaError> {
         self.response_schema
             .validate(response_json)
-            .map_err(|errors| {
-                let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-                SchemaError::ValidationError(error_messages.join(", "))
-            })?;
+            .map_err(|error| SchemaError::ValidationError(error.to_string()))?;
         Ok(())
     }
 
@@ -175,10 +169,7 @@ impl McpSchemaManager {
     ) -> Result<(), SchemaError> {
         self.tool_call_schema
             .validate(tool_call_json)
-            .map_err(|errors| {
-                let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-                SchemaError::ValidationError(error_messages.join(", "))
-            })?;
+            .map_err(|error| SchemaError::ValidationError(error.to_string()))?;
         Ok(())
     }
 
