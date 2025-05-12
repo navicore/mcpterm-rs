@@ -150,9 +150,7 @@ impl McpSchemaManager {
     pub fn validate_request(&self, request_json: &serde_json::Value) -> Result<(), SchemaError> {
         self.request_schema
             .validate(request_json)
-            .map_err(|error| {
-                SchemaError::ValidationError(error.to_string())
-            })?;
+            .map_err(|error| SchemaError::ValidationError(error.to_string()))?;
         Ok(())
     }
 
@@ -160,9 +158,7 @@ impl McpSchemaManager {
     pub fn validate_response(&self, response_json: &serde_json::Value) -> Result<(), SchemaError> {
         self.response_schema
             .validate(response_json)
-            .map_err(|error| {
-                SchemaError::ValidationError(error.to_string())
-            })?;
+            .map_err(|error| SchemaError::ValidationError(error.to_string()))?;
         Ok(())
     }
 
@@ -173,9 +169,7 @@ impl McpSchemaManager {
     ) -> Result<(), SchemaError> {
         self.tool_call_schema
             .validate(tool_call_json)
-            .map_err(|error| {
-                SchemaError::ValidationError(error.to_string())
-            })?;
+            .map_err(|error| SchemaError::ValidationError(error.to_string()))?;
         Ok(())
     }
 
