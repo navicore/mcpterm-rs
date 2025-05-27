@@ -103,17 +103,10 @@ impl Colors {
 }
 
 /// Format tool results in a human-friendly way
+#[derive(Default)]
 pub struct ResponseFormatter {
     /// JSON-RPC filter for removing tool calls from user-facing output
     json_filter: JsonRpcFilter,
-}
-
-impl Default for ResponseFormatter {
-    fn default() -> Self {
-        Self {
-            json_filter: JsonRpcFilter::new(),
-        }
-    }
 }
 
 impl ResponseFormatter {
