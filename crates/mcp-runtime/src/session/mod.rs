@@ -321,26 +321,23 @@ impl<L: LlmClient + 'static> SessionManager<L> {
             let active_requests = active_requests.clone();
 
             Box::pin(async move {
-                match event {
-                    ApiEvent::CancelRequest(request_id) => {
-                        debug!("Cancelling request: {}", request_id);
+                if let ApiEvent::CancelRequest(request_id) = event {
+                    debug!("Cancelling request: {}", request_id);
 
-                        // Mark the request as cancelled
-                        {
-                            let mut requests = active_requests.lock().unwrap();
-                            if let Some(cancelled) = requests.get_mut(&request_id) {
-                                *cancelled = true;
-                            }
-                        }
-
-                        // Try to cancel it in the LLM client
-                        if let Err(e) = llm_client.cancel_request(&request_id) {
-                            error!("Failed to cancel request {}: {:?}", request_id, e);
+                    // Mark the request as cancelled
+                    {
+                        let mut requests = active_requests.lock().unwrap();
+                        if let Some(cancelled) = requests.get_mut(&request_id) {
+                            *cancelled = true;
                         }
                     }
-                    // Handle other API events as needed
-                    _ => {}
+
+                    // Try to cancel it in the LLM client
+                    if let Err(e) = llm_client.cancel_request(&request_id) {
+                        error!("Failed to cancel request {}: {:?}", request_id, e);
+                    }
                 }
+
                 Ok(())
             })
         })
